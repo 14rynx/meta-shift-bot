@@ -42,7 +42,11 @@ async def on_message(message):
         return
 
     try:
-        category_str, link, *note_words = message.content.split(" ")
+        if help in message.content:
+            await message.author.send(f"To add into the competition, write a message like this:\n"
+                                      "<video_url> <category (1/2/3)> <further notes>")
+
+        link, category_str, *note_words = message.content.split(" ")
         category = int(category_str)
 
         videoid = video_id(link)
@@ -51,12 +55,14 @@ async def on_message(message):
         note = " ".join(note_words)
         target_entry_id = f"{message.author.id}-{category}"
 
-        operation = spreadsheet_connector.add_update(1, target_entry_id, [message.author.name, cleaned_url, category, note])
+        operation = spreadsheet_connector.add_update(1, target_entry_id,
+                                                     [message.author.name, cleaned_url, category, note])
 
         if operation == "added":
             await message.author.send(f"Your video {cleaned_url} has been entered into the Meta Shift Competition.")
         else:
-            await message.author.send(f"Your video entry {cleaned_url} for the Meta Shift Competition has been updated.")
+            await message.author.send(
+                f"Your video entry {cleaned_url} for the Meta Shift Competition has been updated.")
 
     except ValueError:
         pass
