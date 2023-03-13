@@ -41,11 +41,8 @@ async def on_message(message):
     if message.author == client.user:  # It is our own message
         return
 
-    if message.channel.id in [1079429447368847391, 1081618378688561203, 1080949544356941874]:
-        pass
-    elif message.channel.type.name == "private":
-        pass
-    else:
+    if message.channel.id not in [1079429447368847391, 1081618378688561203, 1080949544356941874,
+                                  1084968028837531648] and message.channel.type.name != "private":
         return
 
     try:
@@ -66,6 +63,7 @@ async def on_message(message):
                                                      [message.author.name, cleaned_url, category, note])
 
         if message.channel.type.name != "private":
+            await message.delete()
             await message.channel.send(
                 f"{message.author.mention} your entry into the Meta Shift Video competition has been accepted. Thank you!")
 
@@ -75,7 +73,6 @@ async def on_message(message):
         else:
             await message.author.send(
                 f"Your video entry for category {category} in the Meta Shift Competition has been updated to {cleaned_url}.")
-        await message.delete()
 
     except ValueError:
         pass
