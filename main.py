@@ -49,33 +49,42 @@ async def on_message(message):
         if "help" in message.content:
             await message.author.send(f"To add into the competition, write a message like this:\n"
                                       "<video_url> <category (1/2/3)> <further notes>")
+    except discord.errors.Forbidden:
+        print(f"Could not PM {message.author.id}")
 
+    try:
         link, category_str, *note_words = message.content.split(" ")
         category = int(category_str)
 
         videoid = video_id(link)
         cleaned_url = f"https://www.youtube.com/watch?v={videoid}"
-
+    except ValueError:
+        pass
+    else:
         note = " ".join(note_words)
         target_entry_id = f"{message.author.id}-{category}"
-
         operation = spreadsheet_connector.add_update(1, target_entry_id,
                                                      [message.author.name, cleaned_url, category, note])
 
         if message.channel.type.name != "private":
-            await message.delete()
-            await message.channel.send(
-                f"{message.author.mention} your entry into the Meta Shift Video competition has been accepted. Thank you!")
-
-        if operation == "added":
-            await message.author.send(
-                f"Personal confirmation that your video {cleaned_url} has been entered into the Meta Shift Competition under category {category}.")
-        else:
-            await message.author.send(
-                f"Your video entry for category {category} in the Meta Shift Competition has been updated to {cleaned_url}.")
-
-    except ValueError:
-        pass
+            try:
+                await message.delete()
+            except discord.errors.Forbidden:
+                print(f"Could not delete a message in channel {message.channel.id}")
+            try:
+                await message.channel.send(
+                    f"{message.author.mention} your entry into the Meta Shift Video competition has been accepted. Thank you!")
+            except discord.errors.Forbidden:
+                print(f"Could not write a message in channel {message.channel.id}")
+        try:
+            if operation == "added":
+                await message.author.send(
+                    f"Personal confirmation that your video {cleaned_url} has been entered into the Meta Shift Competition under category {category}.")
+            else:
+                await message.author.send(
+                    f"Your video entry for category {category} in the Meta Shift Competition has been updated to {cleaned_url}.")
+        except discord.errors.Forbidden:
+            print(f"Could not PM {message.author.id}")
 
 
 client.run(TOKEN)
