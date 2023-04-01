@@ -12,7 +12,6 @@ intent = discord.Intents.default()
 intent.messages = True
 intent.message_content = True
 client = discord.Client(intents=intent)
-spreadsheet_connector = SpreadsheetConnector()
 
 
 # Stolen from Stackoverflow: https://stackoverflow.com/a/7936523
@@ -61,30 +60,36 @@ async def on_message(message):
     except ValueError:
         pass
     else:
-        note = " ".join(note_words)
-        target_entry_id = f"{message.author.id}-{category}"
-        operation = spreadsheet_connector.add_update(1, target_entry_id,
-                                                     [message.author.name, cleaned_url, category, note])
-
-        if message.channel.type.name != "private":
-            try:
-                await message.delete()
-            except discord.errors.Forbidden:
-                print(f"Could not delete a message in channel {message.channel.id}")
-            try:
-                await message.channel.send(
-                    f"{message.author.mention} your entry into the Meta Shift Video competition has been accepted. Thank you!")
-            except discord.errors.Forbidden:
-                print(f"Could not write a message in channel {message.channel.id}")
         try:
-            if operation == "added":
-                await message.author.send(
-                    f"Personal confirmation that your video {cleaned_url} has been entered into the Meta Shift Competition under category {category}.")
-            else:
-                await message.author.send(
-                    f"Your video entry for category {category} in the Meta Shift Competition has been updated to {cleaned_url}.")
-        except discord.errors.Forbidden:
-            print(f"Could not PM {message.author.id}")
+            spreadsheet_connector = SpreadsheetConnector()
+
+            note = " ".join(note_words)
+            target_entry_id = f"{message.author.id}-{category}"
+            operation = spreadsheet_connector.add_update(1, target_entry_id,
+                                                         [message.author.name, cleaned_url, category, note])
+
+            if message.channel.type.name != "private":
+                try:
+                    await message.delete()
+                except discord.errors.Forbidden:
+                    print(f"Could not delete a message in channel {message.channel.id}")
+                try:
+                    await message.channel.send(
+                        f"{message.author.mention} your entry into the Meta Shift Video competition has been accepted. Thank you!")
+                except discord.errors.Forbidden:
+                    print(f"Could not write a message in channel {message.channel.id}")
+            try:
+                if operation == "added":
+                    await message.author.send(
+                        f"Personal confirmation that your video {cleaned_url} has been entered into the Meta Shift Competition under category {category}.")
+                else:
+                    await message.author.send(
+                        f"Your video entry for category {category} in the Meta Shift Competition has been updated to {cleaned_url}.")
+            except discord.errors.Forbidden:
+                print(f"Could not PM {message.author.id}")
+        except Exception as e:
+            user = client.get_user(242164531151765505)  # Larynx
+            await user.send(f"fThere was an unexpected Error:\n {e}")
 
 
 client.run(TOKEN)
