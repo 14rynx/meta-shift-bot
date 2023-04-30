@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from urllib.parse import urlparse, parse_qs
 
 import discord
@@ -66,7 +66,7 @@ async def on_message(message):
 
             note = " ".join(note_words)
             target_entry_id = f"{message.author.id}-{category}"
-            time_of_entry = datetime.utcnow()
+            time_of_entry = datetime.utcnow() - timedelta(hours=14.5)
             season = (time_of_entry.year - 2023) * 6 + (time_of_entry.month - 1) // 2
             operation = spreadsheet_connector.add_update(
                 season,
