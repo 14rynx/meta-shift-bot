@@ -1,4 +1,5 @@
 import json
+from datetime import datetime
 from urllib.parse import urlparse, parse_qs
 
 import discord
@@ -65,8 +66,13 @@ async def on_message(message):
 
             note = " ".join(note_words)
             target_entry_id = f"{message.author.id}-{category}"
-            operation = spreadsheet_connector.add_update(1, target_entry_id,
-                                                         [message.author.name, cleaned_url, category, note])
+            time_of_entry = datetime.utcnow()
+            season = (time_of_entry.year - 2023) * 6 + (time_of_entry.month - 1) // 2
+            operation = spreadsheet_connector.add_update(
+                season,
+                target_entry_id,
+                [message.author.name, cleaned_url, category, note]
+            )
 
             if message.channel.type.name != "private":
                 try:
