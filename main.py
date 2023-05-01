@@ -53,7 +53,9 @@ async def on_message(message):
         print(f"Could not PM {message.author.id}")
 
     try:
-        link, category_str, *note_words = message.content.split(" ")
+        message_text = message.content
+        message_text = message_text.replace("\n", " ").replace("\r", " ")
+        link, category_str, *note_words = [word for word in message_text.split(" ") if len(word) > 0]
         category = int(category_str)
 
         videoid = video_id(link)
