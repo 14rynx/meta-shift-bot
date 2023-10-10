@@ -4,7 +4,7 @@ from apiclient import discovery
 from google.oauth2 import service_account
 
 # The ID and range of a sample spreadsheet.
-with open('secrets.json', "r") as f:
+with open('../secrets.json', "r") as f:
     SPREADSHEET_ID = json.loads(f.read())["SPREADSHEET_ID"]
 
 
