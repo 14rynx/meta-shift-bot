@@ -12,10 +12,11 @@ async def get_partial_score(kill, rules, user_id):
     killer_point = None
 
     for attacker in kill["attackers"]:
-        if int(attacker.get("character_id", 0)) == user_id:
-            killer_point = rules.killer_points(attacker.get("ship_type_id", 0))
-        else:
-            helper_points.append(rules.helper_points(attacker.get("ship_type_id", 0)))
+        if "character_id" in attacker:
+            if int(attacker["character_id"]) == user_id:
+                killer_point = rules.killer_points(attacker.get("ship_type_id", 0))
+            else:
+                helper_points.append(rules.helper_points(attacker.get("ship_type_id", 0)))
 
     if victim_point is None or killer_point is None or None in helper_points:
         return 0
