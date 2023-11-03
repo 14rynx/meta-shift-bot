@@ -4,6 +4,7 @@ import shelve
 
 import discord
 
+from year2.rules import RulesConnector
 from year2.points import get_score
 from year2.utils import lookup
 
