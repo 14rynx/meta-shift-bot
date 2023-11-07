@@ -5,8 +5,8 @@ import shelve
 import discord
 
 from points import get_score, get_id_score
-from utils import lookup
 from rules import RulesConnector
+from utils import lookup
 
 with open('secrets.json', "r") as f:
     TOKEN = json.loads(f.read())["TOKEN"]
@@ -26,6 +26,7 @@ help_message = "\n".join([
 ])
 
 rules = RulesConnector(1)
+
 
 @client.event
 async def on_ready():
@@ -88,7 +89,10 @@ async def on_message(message):
             output += f"{count}: <@{author_id}> with {points} points\n"
             count += 1
 
-        await message.channel.send(output)
+        await message.channel.send(
+            output,
+            allowed_mentions=discord.AllowedMentions(roles=False, everyone=False, users=False)
+        )
 
     if message.content.startswith("!breakdown"):
         with shelve.open('data/linked_characters', writeback=True) as linked_characters:
@@ -98,10 +102,13 @@ async def on_message(message):
                 character_id = linked_characters[author_id]
                 id_scores = await get_id_score(rules, character_id)
 
-                output = "# Your current best kills\n"
+                output = "# <@{author_id}> your current best kills\n"
                 for kill_id, score in sorted(id_scores, key=lambda x: x[1], reverse=True)[0:30]:
                     output += f"{score:.3f} https://zkillboard.com/kill/{kill_id}/\n"
-                await message.channel.send(output)
+                await message.channel.send(
+                    output,
+                    allowed_mentions=discord.AllowedMentions(roles=False, everyone=False, users=False)
+                )
 
 
 client.run(TOKEN)
