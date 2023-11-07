@@ -6,6 +6,7 @@ import discord
 
 from points import get_score, get_id_score
 from utils import lookup
+from rules import RulesConnector
 
 with open('secrets.json', "r") as f:
     TOKEN = json.loads(f.read())["TOKEN"]
@@ -24,6 +25,7 @@ help_message = "\n".join([
     "- `!breakdown` to see your best kills"
 ])
 
+rules = RulesConnector(1)
 
 @client.event
 async def on_ready():
@@ -31,6 +33,7 @@ async def on_ready():
         os.mkdir("data")
     except FileExistsError:
         pass
+
     print(f'We have logged in as {client.user}')
 
 
@@ -71,17 +74,17 @@ async def on_message(message):
                 await message.channel.send(f"You do not have any linked character!")
             else:
                 character_id = linked_characters[author_id]
-                await message.channel.send(f"You currently have {await get_score(character_id)} points")
+                await message.channel.send(f"You currently have {await get_score(rules, character_id)} points")
 
     if message.content.startswith("!leaderboard"):
         with shelve.open('data/linked_characters', writeback=True) as linked_characters:
             leaderboard = {}
             for author, character_id in linked_characters.items():
-                leaderboard[author] = await get_score(character_id)
+                leaderboard[author] = await get_score(rules, character_id)
 
         output = "# Leaderboard\n"
         count = 1
-        for author_id, points in sorted(leaderboard.items(), key=lambda x: x[1]):
+        for author_id, points in sorted(leaderboard.items(), reverse=True, key=lambda x: x[1])[:30]:
             output += f"{count}: <@{author_id}> with {points} points\n"
             count += 1
 
@@ -93,7 +96,7 @@ async def on_message(message):
                 await message.channel.send(f"You do not have any linked character!")
             else:
                 character_id = linked_characters[author_id]
-                id_scores = await get_id_score(character_id)
+                id_scores = await get_id_score(rules, character_id)
 
                 output = "# Your current best kills\n"
                 for kill_id, score in sorted(id_scores, key=lambda x: x[1], reverse=True)[0:30]:

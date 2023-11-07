@@ -1,7 +1,6 @@
 import asyncio
 from datetime import datetime, timedelta
 
-from rules import RulesConnector
 from utils import gather_kills
 
 
@@ -28,11 +27,9 @@ async def get_partial_score(kill, rules, user_id):
     return eval(rules.kill_formula, allowed_globals)
 
 
-async def get_score(character_id):
+async def get_score(rules, character_id):
     until = datetime.utcnow() - timedelta(days=90)  # TODO: Fix according to timespan
     kills = await gather_kills(f"https://zkillboard.com/api/kills/characterID/{character_id}/kills/", until)
-
-    rules = RulesConnector(1)  # TODO: Season selector
 
     tasks = [get_partial_score(kill, rules, character_id) for kill in kills]
     points = await asyncio.gather(*tasks)
@@ -50,11 +47,9 @@ async def get_partial_id_score(kill, rules, character_id):
     return kill["killmail_id"], await get_partial_score(kill, rules, character_id)
 
 
-async def get_id_score(character_id):
+async def get_id_score(rules, character_id):
     until = datetime.utcnow() - timedelta(days=90)  # TODO: Fix according to timespan
     kills = await gather_kills(f"https://zkillboard.com/api/kills/characterID/{character_id}/kills/", until)
-
-    rules = RulesConnector(1)  # TODO: Season selector
 
     tasks = [get_partial_id_score(kill, rules, character_id) for kill in kills]
     ids_and_points = await asyncio.gather(*tasks)
