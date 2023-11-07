@@ -4,8 +4,8 @@ import shelve
 
 import discord
 
-from year2.points import get_score
-from year2.utils import lookup
+from points import get_score
+from utils import lookup
 
 with open('secrets.json', "r") as f:
     TOKEN = json.loads(f.read())["TOKEN"]

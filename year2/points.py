@@ -1,8 +1,8 @@
 import asyncio
 from datetime import datetime, timedelta
 
-from year2.rules import RulesConnector
-from year2.utils import gather_kills
+from rules import RulesConnector
+from utils import gather_kills
 
 
 async def get_partial_score(kill, rules, user_id):
