@@ -47,7 +47,7 @@ async def get_score(character_id):
 
 
 async def get_partial_id_score(kill, rules, character_id):
-    return character_id, await get_partial_score(kill, rules, character_id)
+    return kill["killmail_id"], await get_partial_score(kill, rules, character_id)
 
 
 async def get_id_score(character_id):
