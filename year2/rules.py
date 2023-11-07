@@ -53,14 +53,15 @@ class RulesConnector:
         values = result.get('values', [])
 
         out = {}
-        for k, v in values:
+        for line in values:
             try:
-                v = float(v)
-                k = int(k)
+                item_id, point_value = line
+                point_value = float(point_value)
+                item_id = int(item_id)
             except ValueError:
                 continue
             else:
-                out[k] = v
+                out[item_id] = point_value
         return out
 
     def writeback_row(self, start, body):
