@@ -31,11 +31,11 @@ async def get_score(rules, character_id):
     until = datetime.utcnow() - timedelta(days=90)  # TODO: Fix according to timespan
     kills = await gather_kills(f"https://zkillboard.com/api/kills/characterID/{character_id}/kills/", until)
 
+    # Fetch the newest rules if needed
+    await rules.update()
+
     tasks = [get_partial_score(kill, rules, character_id) for kill in kills]
     points = await asyncio.gather(*tasks)
-
-    # Write any ships where the point amount was unknown back to the spreadsheet so rules can be improved
-    await rules.writeback()
 
     # Limit the available functions for eval()
     allowed_globals = {'__builtins__': None, 'sorted': sorted, 'sum': sum, 'points': points}
@@ -51,10 +51,10 @@ async def get_id_score(rules, character_id):
     until = datetime.utcnow() - timedelta(days=90)  # TODO: Fix according to timespan
     kills = await gather_kills(f"https://zkillboard.com/api/kills/characterID/{character_id}/kills/", until)
 
+    # Fetch the newest rules if needed
+    await rules.update()
+
     tasks = [get_partial_id_score(kill, rules, character_id) for kill in kills]
     ids_and_points = await asyncio.gather(*tasks)
-
-    # Write any ships where the point amount was unknown back to the spreadsheet so rules can be improved
-    await rules.writeback()
 
     return ids_and_points
