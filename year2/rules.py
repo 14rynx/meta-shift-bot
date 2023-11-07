@@ -43,8 +43,6 @@ class RulesConnector:
         result = self.sheet.values().get(spreadsheetId=SPREADSHEET_ID, range=f'Season {self.season_id}!O2:O2').execute()
         self.sum_formula = result.get('values', [])[0][0]
 
-        print(self._killer_points, self._victim_points, self._helper_points, self.kill_formula, self.sum_formula)
-
     def get_points(self, start):
 
         end = chr(ord(start) + 1)
@@ -56,7 +54,7 @@ class RulesConnector:
         for line in values:
             try:
                 item_id, point_value = line
-                point_value = float(point_value)
+                point_value = float(point_value.replace(",", "."))
                 item_id = int(item_id)
             except ValueError:
                 continue

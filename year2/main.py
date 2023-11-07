@@ -4,7 +4,7 @@ import shelve
 
 import discord
 
-from points import get_score
+from points import get_score, get_id_score
 from utils import lookup
 
 with open('secrets.json', "r") as f:
@@ -20,7 +20,8 @@ help_message = "\n".join([
     "- `!link <character name or id>` to enter into the competition",
     "- `!unlink` to exit (no data is lost, you can reenter at any time)",
     "- `!points` to show your current standing",
-    "- `!leaderboard` to see top 10"
+    "- `!leaderboard` to see top 10",
+    "- `!breakdown` to see your best kills"
 ])
 
 
@@ -85,6 +86,18 @@ async def on_message(message):
             count += 1
 
         await message.channel.send(output)
+
+    if message.content.startswith("!breakdown"):
+        with shelve.open('data/linked_characters', writeback=True) as linked_characters:
+            if author_id not in linked_characters:
+                await message.channel.send(f"You do not have any linked character!")
+            else:
+                character_id = linked_characters[author_id]
+                id_scores = await get_id_score(character_id)
+
+                out = "# Your current best kills\n"
+                for kill_id, score in sorted(id_scores, key=lambda x: x[1], reverse=True)[0:30]:
+                    out += f"{score:.3f} https://zkillboard.com/kill/{kill_id}/\n"
 
 
 client.run(TOKEN)
