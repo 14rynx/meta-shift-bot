@@ -56,7 +56,7 @@ async def get_id_score(character_id):
 
     rules = RulesConnector(1)  # TODO: Season selector
 
-    tasks = [score_with_id(kill, rules, character_id) for kill in kills]
+    tasks = [get_partial_id_score(kill, rules, character_id) for kill in kills]
     ids_and_points = await asyncio.gather(*tasks)
 
     # Write any ships where the point amount was unknown back to the spreadsheet so rules can be improved
