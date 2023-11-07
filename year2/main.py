@@ -102,13 +102,10 @@ async def on_message(message):
                 character_id = linked_characters[author_id]
                 id_scores = await get_id_score(rules, character_id)
 
-                output = "# <@{author_id}> your current best kills\n"
+                output = "# Your current best kills\n"
                 for kill_id, score in sorted(id_scores, key=lambda x: x[1], reverse=True)[0:30]:
                     output += f"{score:.3f} https://zkillboard.com/kill/{kill_id}/\n"
-                await message.channel.send(
-                    output,
-                    allowed_mentions=discord.AllowedMentions(roles=False, everyone=False, users=False)
-                )
+                await message.channel.send(output)
 
 
 client.run(TOKEN)
