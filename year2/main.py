@@ -4,11 +4,10 @@ import shelve
 
 import discord
 
-from year2.rules import RulesConnector
 from year2.points import get_score
 from year2.utils import lookup
 
-with open('../secrets.json', "r") as f:
+with open('secrets.json', "r") as f:
     TOKEN = json.loads(f.read())["TOKEN"]
 
 intent = discord.Intents.default()

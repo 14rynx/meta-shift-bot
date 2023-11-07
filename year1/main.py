@@ -6,7 +6,7 @@ import discord
 
 from docs import SpreadsheetConnector
 
-with open('../secrets.json', "r") as f:
+with open('secrets.json', "r") as f:
     TOKEN = json.loads(f.read())["TOKEN"]
 
 intent = discord.Intents.default()
