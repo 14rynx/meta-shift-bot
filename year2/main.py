@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 import shelve
@@ -83,9 +84,12 @@ async def on_message(message):
 
     if message.content.startswith("!leaderboard"):
         with shelve.open('data/linked_characters', writeback=True) as linked_characters:
-            leaderboard = {}
-            for author, character_id in linked_characters.items():
-                leaderboard[author] = await get_total_score(rules, character_id)
+
+            async def pass_trough(aid, cid):
+                return aid, await get_total_score(rules, cid)
+
+            tasks = [pass_trough(author, character_id) for author, character_id in linked_characters.items()]
+            leaderboard = {author: score for author, score in await asyncio.gather(*tasks)}
 
         output = "# Leaderboard\n"
         count = 1

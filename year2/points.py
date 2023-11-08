@@ -71,6 +71,7 @@ async def get_scores(rules, character_id):
 
             # Fetch kill information from zkillboard
             async with session.get(f"{zkill_url}page/{page}/") as response:
+                kills = []
                 for attempt in range(10):
                     try:
                         kills = await response.json(content_type=None)
@@ -93,14 +94,15 @@ async def get_scores(rules, character_id):
                     # If a kill is too far in the past, then we do not include it
                     if kill_time > start:
                         ids_and_scores[kill_id] = kill_score
+                    else:
+                        over = True
                 else:
                     tasks.append(get_kill_score(session, kill_id, kill_hash, rules, character_id))
 
             # Fill in the gaps and update cache
             for kill_id, kill_time, kill_score in await asyncio.gather(*tasks):
                 known_kills[kill_id] = (kill_time, kill_score)
-                # If a kill is too far in the past, then we do not include it
-                # We also know we do not need to fetch further pages from zkillboard
+
                 if kill_time > start:
                     ids_and_scores[kill_id] = kill_score
                 else:
