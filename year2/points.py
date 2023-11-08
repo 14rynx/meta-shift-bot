@@ -78,7 +78,7 @@ async def get_scores(rules, character_id):
                         page += 1
                         break
                     except json.decoder.JSONDecodeError:
-                        time.sleep(1)
+                        await asyncio.sleep(0.1)
 
             # Extract data, which might be differently encoded depending on which zkill url is used
             if type(kills) is dict:
