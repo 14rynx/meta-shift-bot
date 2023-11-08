@@ -40,3 +40,10 @@ async def get_item_name(session, type_id):
         if response.status == 200:
             return (await response.json(content_type=None))["name"]
         return f"Could not Fetch Item Name, Type ID: {type_id}"
+
+
+async def get_system_security(session, system_id):
+    async with session.get(f"https://esi.evetech.net/latest/universe/systems/{system_id}/") as response:
+        if response.status == 200:
+            return (await response.json(content_type=None))["security_status"]
+        return 0.0

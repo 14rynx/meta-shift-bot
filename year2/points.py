@@ -1,11 +1,8 @@
 import asyncio
 import json
-import ssl
-import time
 from datetime import datetime, timedelta
 
-import aiohttp
-import certifi
+from utils import get_system_security
 
 known_kills = {}
 
@@ -41,6 +38,10 @@ async def get_kill_score(session, kill_id, kill_hash, rules, user_id):
     except (ZeroDivisionError, ValueError, TypeError):
         kill_score = 0
 
+    # Kills in Highsec no longer give points
+    if await get_system_security(session, kill.get("solar_system_id", 30004759)) >= 0.5:
+        kill_score = 0
+
     # Find time of killmail for cache
     if "killmail_time" in kill:
         kill_time = datetime.strptime(kill['killmail_time'], '%Y-%m-%dT%H:%M:%SZ')
@@ -60,7 +61,6 @@ async def get_scores(session, rules, character_id):
 
     ids_and_scores = {}
     over = False
-
 
     page = 1
     while not over and page < 100:
