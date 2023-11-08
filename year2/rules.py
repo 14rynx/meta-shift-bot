@@ -1,24 +1,14 @@
 import json
-import ssl
 from datetime import datetime, timedelta
 
-import aiohttp
-import certifi
 from apiclient import discovery
 from google.oauth2 import service_account
+
+from utils import get_item_name
 
 # The ID and range of a sample spreadsheet.
 with open('secrets.json', "r") as f:
     SPREADSHEET_ID = json.loads(f.read())["SPREADSHEET_ID"]
-
-
-async def get_item_name(type_id):
-    ssl_context = ssl.create_default_context(cafile=certifi.where())
-    async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
-        async with session.get(f"https://esi.evetech.net/latest/universe/types/{type_id}/") as response:
-            if response.status == 200:
-                return (await response.json(content_type=None))["name"]
-            return f"Could not Fetch Item Name, Type ID: {type_id}"
 
 
 class RulesConnector:
@@ -32,9 +22,6 @@ class RulesConnector:
         self._victim_points = {}
         self._killer_points = {}
         self._helper_points = {}
-
-        self.kill_formula = "0"
-        self.sum_formula = "0"
 
         self.last_updated = None
 
@@ -52,22 +39,14 @@ class RulesConnector:
             self._killer_points = self.get_points(sheet, "E")
             self._helper_points = self.get_points(sheet, "I")
 
-            result = sheet.values().get(spreadsheetId=SPREADSHEET_ID, range=f'Season {self.season_id}!M2:M2').execute()
-            self.kill_formula = result.get('values', [])[0][0]
-
-            result = sheet.values().get(spreadsheetId=SPREADSHEET_ID, range=f'Season {self.season_id}!O2:O2').execute()
-            self.sum_formula = result.get('values', [])[0][0]
-
-            body = {'values': [[type_id, "TODO", await get_item_name(type_id)] for type_id in self._victim_missing]}
-            self.write_back(sheet, service, "A", body)
-            body = {'values': [[type_id, "TODO", await get_item_name(type_id)] for type_id in self._killer_missing]}
-            self.write_back(sheet, service, "E", body)
-            body = {'values': [[type_id, "TODO", await get_item_name(type_id)] for type_id in self._helper_missing]}
-            self.write_back(sheet, service, "I", body)
+            await self.write_back(sheet, service, "A", self._victim_missing)
+            await self.write_back(sheet, service, "E", self._killer_missing)
+            await self.write_back(sheet, service, "I", self._helper_missing)
 
             self._victim_missing = set()
             self._killer_missing = set()
             self._helper_missing = set()
+
             service.close()
 
     def get_points(self, sheet, start):
@@ -89,7 +68,9 @@ class RulesConnector:
                 out[item_id] = point_value
         return out
 
-    def write_back(self, sheet, service, start, body):
+    async def write_back(self, sheet, service, start, type_ids):
+        body = {'values': [[type_id, "TODO", await get_item_name(type_id)] for type_id in type_ids]}
+
         result = sheet.values().get(spreadsheetId=SPREADSHEET_ID,
                                     range=f'Season {self.season_id}!{start}3:{start}').execute()
         values = result.get('values', [])
@@ -109,15 +90,18 @@ class RulesConnector:
             return self._victim_points[type_id]
         except KeyError:
             self._victim_missing.add(type_id)
+            return None
 
     def killer_points(self, type_id):
         try:
             return self._killer_points[type_id]
         except KeyError:
             self._killer_missing.add(type_id)
+            return None
 
     def helper_points(self, type_id):
         try:
             return self._helper_points[type_id]
         except KeyError:
             self._helper_missing.add(type_id)
+            return None
