@@ -25,7 +25,7 @@ class RulesConnector:
 
         self.last_updated = None
 
-    async def update(self):
+    async def update(self, session):
         if self.last_updated is None or self.last_updated < datetime.now() - timedelta(minutes=5):
             self.last_updated = datetime.now()
 
@@ -35,13 +35,13 @@ class RulesConnector:
             service = discovery.build('sheets', 'v4', credentials=credentials)
             sheet = service.spreadsheets()
 
-            self._victim_points = self.get_points(sheet, "A")
-            self._killer_points = self.get_points(sheet, "E")
-            self._helper_points = self.get_points(sheet, "I")
+            self._victim_points = self._get_points(sheet, "A")
+            self._killer_points = self._get_points(sheet, "E")
+            self._helper_points = self._get_points(sheet, "I")
 
-            await self.write_back(sheet, service, "A", self._victim_missing)
-            await self.write_back(sheet, service, "E", self._killer_missing)
-            await self.write_back(sheet, service, "I", self._helper_missing)
+            await self._write_back(session, sheet, service, "A", self._victim_missing)
+            await self._write_back(session, sheet, service, "E", self._killer_missing)
+            await self._write_back(session, sheet, service, "I", self._helper_missing)
 
             self._victim_missing = set()
             self._killer_missing = set()
@@ -49,7 +49,7 @@ class RulesConnector:
 
             service.close()
 
-    def get_points(self, sheet, start):
+    def _get_points(self, sheet, start):
 
         end = chr(ord(start) + 1)
         _range = f'Season {self.season_id}!{start}3:{end}'
@@ -68,8 +68,8 @@ class RulesConnector:
                 out[item_id] = point_value
         return out
 
-    async def write_back(self, sheet, service, start, type_ids):
-        body = {'values': [[type_id, "TODO", await get_item_name(type_id)] for type_id in type_ids]}
+    async def _write_back(self, session, sheet, service, start, type_ids):
+        body = {'values': [[type_id, "TODO", await get_item_name(session, type_id)] for type_id in type_ids]}
 
         result = sheet.values().get(spreadsheetId=SPREADSHEET_ID,
                                     range=f'Season {self.season_id}!{start}3:{start}').execute()

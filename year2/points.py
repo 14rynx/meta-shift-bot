@@ -50,72 +50,68 @@ async def get_kill_score(session, kill_id, kill_hash, rules, user_id):
     return kill_id, kill_time, kill_score
 
 
-async def get_scores(rules, character_id):
+async def get_scores(session, rules, character_id):
     """
     Fetch all kills of a character for some period from zkill and do point calculation
     """
     start = datetime.utcnow() - timedelta(days=90)  # TODO: Fix according to timespan
-
-    # Fetch the newest rules if needed
-    await rules.update()
 
     zkill_url = f"https://zkillboard.com/api/kills/characterID/{character_id}/kills/"
 
     ids_and_scores = {}
     over = False
 
-    ssl_context = ssl.create_default_context(cafile=certifi.where())
-    async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
-        page = 1
-        while not over and page < 100:
 
-            # Fetch kill information from zkillboard
-            async with session.get(f"{zkill_url}page/{page}/") as response:
-                kills = []
-                for attempt in range(10):
-                    try:
-                        kills = await response.json(content_type=None)
-                        page += 1
-                        break
-                    except json.decoder.JSONDecodeError:
-                        await asyncio.sleep(0.1)
+    page = 1
+    while not over and page < 100:
 
-            # Extract data, which might be differently encoded depending on which zkill url is used
-            if type(kills) is dict:
-                kills_and_hashes = kills.items()
-            else:
-                kills_and_hashes = [[kill["killmail_id"], kill["zkb"]["hash"]] for kill in kills]
+        # Fetch kill information from zkillboard
+        async with session.get(f"{zkill_url}page/{page}/") as response:
+            kills = []
+            for attempt in range(10):
+                try:
+                    kills = await response.json(content_type=None)
+                    page += 1
+                    break
+                except json.decoder.JSONDecodeError:
+                    await asyncio.sleep(0.1)
 
-            # Find all kills that are already in cache
-            tasks = []
-            for kill_id, kill_hash in kills_and_hashes:
-                if kill_id in known_kills:
-                    kill_time, kill_score = known_kills[kill_id]
-                    # If a kill is too far in the past, then we do not include it
-                    if kill_time > start:
-                        ids_and_scores[kill_id] = kill_score
-                    else:
-                        over = True
-                else:
-                    tasks.append(get_kill_score(session, kill_id, kill_hash, rules, character_id))
+        # Extract data, which might be differently encoded depending on which zkill url is used
+        if type(kills) is dict:
+            kills_and_hashes = kills.items()
+        else:
+            kills_and_hashes = [[kill["killmail_id"], kill["zkb"]["hash"]] for kill in kills]
 
-            # Fill in the gaps and update cache
-            for kill_id, kill_time, kill_score in await asyncio.gather(*tasks):
-                known_kills[kill_id] = (kill_time, kill_score)
-
+        # Find all kills that are already in cache
+        tasks = []
+        for kill_id, kill_hash in kills_and_hashes:
+            if kill_id in known_kills:
+                kill_time, kill_score = known_kills[kill_id]
+                # If a kill is too far in the past, then we do not include it
                 if kill_time > start:
                     ids_and_scores[kill_id] = kill_score
                 else:
                     over = True
+            else:
+                tasks.append(get_kill_score(session, kill_id, kill_hash, rules, character_id))
+
+        # Fill in the gaps and update cache
+        for kill_id, kill_time, kill_score in await asyncio.gather(*tasks):
+            known_kills[kill_id] = (kill_time, kill_score)
+
+            if kill_time > start:
+                ids_and_scores[kill_id] = kill_score
+            else:
+                over = True
 
     return ids_and_scores
 
 
-async def get_total_score(rules, character_id):
+async def get_total_score(session, rules, character_id):
     """
     Sum up all the scores according to the competition rules
     """
-    ids_and_scores = await get_scores(rules, character_id)
+    ids_and_scores = await get_scores(session, rules, character_id)
     try:
         total_score = round(sum(sorted(ids_and_scores.values(), reverse=True)[:30]), 2)
     except ValueError:

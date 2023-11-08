@@ -35,10 +35,8 @@ async def lookup(string, return_type):
             raise ValueError
 
 
-async def get_item_name(type_id):
-    ssl_context = ssl.create_default_context(cafile=certifi.where())
-    async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
-        async with session.get(f"https://esi.evetech.net/latest/universe/types/{type_id}/") as response:
-            if response.status == 200:
-                return (await response.json(content_type=None))["name"]
-            return f"Could not Fetch Item Name, Type ID: {type_id}"
+async def get_item_name(session, type_id):
+    async with session.get(f"https://esi.evetech.net/latest/universe/types/{type_id}/") as response:
+        if response.status == 200:
+            return (await response.json(content_type=None))["name"]
+        return f"Could not Fetch Item Name, Type ID: {type_id}"
