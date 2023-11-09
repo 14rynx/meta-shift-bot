@@ -1,4 +1,8 @@
-google-api-python-client
+google-api-python-client~=2.80.0
 google-auth-httplib2
 google-auth-oauthlib
-discord
+discord~=2.1.0
+async-lru
+asyncio
+aiohttp~=3.8.4
+certifi~=2022.12.7

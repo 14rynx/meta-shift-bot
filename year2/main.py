@@ -8,7 +8,7 @@ import aiohttp
 import certifi
 import discord
 
-from points import get_total_score, get_scores
+from points import get_total_score, get_scores, update_score
 from rules import RulesConnector
 from utils import lookup
 
@@ -125,6 +125,16 @@ async def on_message(message):
                     for kill_id, score in sorted(ids_and_scores.items(), key=lambda x: x[1], reverse=True)[0:30]:
                         output += f"{score:.3f} https://zkillboard.com/kill/{kill_id}/\n"
                     await message.channel.send(output)
+
+        #
+        # if message.content.startswith("!explain"):
+        #     try:
+        #         kill_id = int(message.content.split("/")[-2])
+        #     except (ValueError, IndexError):
+        #         await message.channel.send("Could not parse that link!")
+        #
+        #     score = await update_score(session, kill_id)
+        #     await message.channel.send(f"https://zkillboard.com/kill/{kill_id}/ is worth {score} points.")
 
 
 client.run(TOKEN)

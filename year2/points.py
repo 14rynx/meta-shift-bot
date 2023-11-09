@@ -2,19 +2,9 @@ import asyncio
 import json
 from datetime import datetime, timedelta
 
-from utils import get_system_security
+from utils import get_system_security, get_item_metalevel, get_ship_slots, get_kill, get_hash
 
 known_kills = {}
-
-
-async def get_kill(session, kill_id, kill_hash):
-    """Fetch a kill from ESI based on its id and hash"""
-    async with session.get(
-            f"https://esi.evetech.net/latest/killmails/{kill_id}/{kill_hash}/?datasource=tranquility") as resp:
-        try:
-            return await resp.json(content_type=None)
-        except json.decoder.JSONDecodeError:
-            return await get_kill(session, kill_id, kill_hash)
 
 
 async def get_kill_score(session, kill_id, kill_hash, rules, user_id):
@@ -42,6 +32,23 @@ async def get_kill_score(session, kill_id, kill_hash, rules, user_id):
     # Kills in Highsec no longer give points
     if await get_system_security(session, kill.get("solar_system_id", 30004759)) >= 0.5:
         kill_score = 0
+
+    # Figure out the metalevel of items
+    meta_levels = []
+    for item in kill.get("victim", {}).get("items", []):
+        if 11 <= item.get("flag", 0) < 34:  # Item fitted to slots
+            meta_levels.append(await get_item_metalevel(session, item["item_type_id"]))
+
+    slots = (await get_ship_slots(session, kill["victim"]["ship_type_id"]))
+    if slots > 0:
+        average_meta_level = sum(meta_levels) / slots
+    elif len(meta_levels) > 0:
+        average_meta_level = sum(meta_levels) / len(meta_levels)
+    else:
+        average_meta_level = 5  # T2
+
+    # Adjust score based on meta level
+    kill_score *= (0.5 + 0.1 * average_meta_level)
 
     # Find time of killmail for cache
     if "killmail_time" in kill:
@@ -106,6 +113,18 @@ async def get_scores(session, rules, character_id):
                 over = True
 
     return ids_and_scores
+
+
+async def update_score(session, rules, character_id, kill_id):
+    """Calculate a single ID and return what it is worth, and update it in the cache"""
+
+    kill_hash = await get_hash(session, kill_id)
+    _, kill_time, kill_score = await get_kill_score(session, kill_id, kill_hash, rules, character_id)
+
+    # Update cache
+    known_kills[kill_id] = (kill_time, kill_score)
+
+    return kill_score
 
 
 async def get_total_score(session, rules, character_id):
