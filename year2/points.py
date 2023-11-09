@@ -29,7 +29,8 @@ async def get_kill_score(session, kill_id, kill_hash, rules, user_id):
     for attacker in kill.get("attackers", []):
         if "character_id" in attacker:
             if int(attacker["character_id"]) == user_id:
-                killer_point = rules.killer_points(attacker.get("ship_type_id", None))
+                if "ship_type_id" in attacker:
+                    killer_point = rules.killer_points(attacker["ship_type_id"])
             else:
                 helper_points.append(rules.helper_points(attacker.get("ship_type_id", 0)))
 
