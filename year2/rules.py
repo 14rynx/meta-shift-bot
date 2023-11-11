@@ -15,13 +15,13 @@ class RulesConnector:
     def __init__(self, season_id):
         self.season_id = season_id
 
-        self._victim_missing = set()
-        self._killer_missing = set()
-        self._helper_missing = set()
+        self._rarity_adjusted_missing = set()
+        self._risk_adjusted_missing = set()
+        self._missing = set()
 
-        self._victim_points = {}
-        self._killer_points = {}
-        self._helper_points = {}
+        self._rarity_adjusted_points = {}
+        self._risk_adjusted_points = {}
+        self._points = {}
 
         self.last_updated = None
 
@@ -35,17 +35,17 @@ class RulesConnector:
             service = discovery.build('sheets', 'v4', credentials=credentials)
             sheet = service.spreadsheets()
 
-            self._victim_points = self._get_points(sheet, "A")
-            self._killer_points = self._get_points(sheet, "E")
-            self._helper_points = self._get_points(sheet, "I")
+            self._rarity_adjusted_points = self._get_points(sheet, "A")
+            self._risk_adjusted_points = self._get_points(sheet, "E")
+            self._points = self._get_points(sheet, "I")
 
-            await self._write_back(session, sheet, service, "A", self._victim_missing)
-            await self._write_back(session, sheet, service, "E", self._killer_missing)
-            await self._write_back(session, sheet, service, "I", self._helper_missing)
+            await self._write_back(session, sheet, service, "A", self._rarity_adjusted_missing)
+            await self._write_back(session, sheet, service, "E", self._risk_adjusted_missing)
+            await self._write_back(session, sheet, service, "I", self._missing)
 
-            self._victim_missing = set()
-            self._killer_missing = set()
-            self._helper_missing = set()
+            self._rarity_adjusted_missing = set()
+            self._risk_adjusted_missing = set()
+            self._missing = set()
 
             service.close()
 
@@ -85,23 +85,23 @@ class RulesConnector:
             valueInputOption="USER_ENTERED", body=body
         ).execute()
 
-    def victim_points(self, type_id):
+    def rarity_adjusted_points(self, type_id):
         try:
-            return self._victim_points[type_id]
+            return self._rarity_adjusted_points[type_id]
         except KeyError:
-            self._victim_missing.add(type_id)
+            self._rarity_adjusted_missing.add(type_id)
             return None
 
-    def killer_points(self, type_id):
+    def risk_adjusted_points(self, type_id):
         try:
-            return self._killer_points[type_id]
+            return self._risk_adjusted_points[type_id]
         except KeyError:
-            self._killer_missing.add(type_id)
+            self._risk_adjusted_missing.add(type_id)
             return None
 
-    def helper_points(self, type_id):
+    def points(self, type_id):
         try:
-            return self._helper_points[type_id]
+            return self._points[type_id]
         except KeyError:
-            self._helper_missing.add(type_id)
+            self._missing.add(type_id)
             return None

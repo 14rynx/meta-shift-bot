@@ -7,29 +7,36 @@ from utils import get_system_security, get_item_metalevel, get_ship_slots, get_k
 known_kills = {}
 
 
-async def get_kill_score(session, kill_id, kill_hash, rules, user_id):
+async def get_kill_score(session, kill_id, kill_hash, rules, user_id=None):
     """Fetch a single kill from ESI and calculate it's score according to the competition rules"""
     kill = await get_kill(session, kill_id, kill_hash)
 
-    victim_point = rules.victim_points(kill.get("victim", {}).get("ship_type_id", 0))
+    # Calculate points of each category
+    standard_victim_point = rules.rarity_adjusted_points(kill.get("victim", {}).get("ship_type_id", 0))
 
-    helper_points = []
-    killer_point = None
+    standard_points = []
+    risk_adjusted_pilot_point = None
 
     for attacker in kill.get("attackers", []):
         if "character_id" in attacker:
             if int(attacker["character_id"]) == user_id:
                 if "ship_type_id" in attacker:
-                    killer_point = rules.killer_points(attacker["ship_type_id"])
+                    risk_adjusted_pilot_point = rules.risk_adjusted_points(attacker["ship_type_id"])
             else:
-                helper_points.append(rules.helper_points(attacker.get("ship_type_id", 0)))
+                standard_points.append(rules.points(attacker.get("ship_type_id", 0)))
 
+    # Combine points into preliminary score
     try:
-        kill_score = 10 * victim_point / (killer_point + sum(helper_points))
+        if user_id:
+            kill_score = 10 * standard_victim_point / (risk_adjusted_pilot_point + sum(standard_points))
+        else:
+            print(standard_victim_point, standard_points)
+            kill_score = 10 * standard_victim_point / sum(standard_points)
+
     except (ZeroDivisionError, ValueError, TypeError):
         kill_score = 0
 
-    # Kills in Highsec no longer give points
+    # Remove Highsec Kills
     if await get_system_security(session, kill.get("solar_system_id", 30004759)) >= 0.5:
         kill_score = 0
 
@@ -39,6 +46,7 @@ async def get_kill_score(session, kill_id, kill_hash, rules, user_id):
         if 11 <= item.get("flag", 0) < 34:  # Item fitted to slots
             meta_levels.append(await get_item_metalevel(session, item["item_type_id"]))
 
+    # Average the meta level in the best available way
     slots = (await get_ship_slots(session, kill["victim"]["ship_type_id"]))
     if slots > 0:
         average_meta_level = sum(meta_levels) / slots
@@ -55,6 +63,18 @@ async def get_kill_score(session, kill_id, kill_hash, rules, user_id):
         kill_time = datetime.strptime(kill['killmail_time'], '%Y-%m-%dT%H:%M:%SZ')
     else:
         kill_time = datetime.utcnow()
+
+    # Figure out time bracket allowed for this kill to be merged (To be used in future versions)
+    standard_points = []
+    for attacker in kill.get("attackers", []):
+        if "character_id" in attacker:
+            standard_points.append(rules.points(attacker.get("ship_type_id", 0)))
+    standard_victim_point = rules.points(kill.get("victim", {}).get("ship_type_id", 0))
+
+    try:
+        time_bracket = 60 * standard_victim_point / sum(standard_points)
+    except (ZeroDivisionError, ValueError, TypeError):
+        time_bracket = 60
 
     return kill_id, kill_time, kill_score
 
@@ -113,18 +133,6 @@ async def get_scores(session, rules, character_id):
                 over = True
 
     return ids_and_scores
-
-
-async def update_score(session, rules, character_id, kill_id):
-    """Calculate a single ID and return what it is worth, and update it in the cache"""
-
-    kill_hash = await get_hash(session, kill_id)
-    _, kill_time, kill_score = await get_kill_score(session, kill_id, kill_hash, rules, character_id)
-
-    # Update cache
-    known_kills[kill_id] = (kill_time, kill_score)
-
-    return kill_score
 
 
 async def get_total_score(session, rules, character_id):
