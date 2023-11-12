@@ -72,11 +72,11 @@ async def get_kill_score(session, kill_id, kill_hash, rules, user_id=None):
     standard_victim_point = rules.points(kill.get("victim", {}).get("ship_type_id", 0))
 
     try:
-        time_bracket = 60 * standard_victim_point / sum(standard_points)
+        time_bracket = timedelta(seconds=180 * standard_victim_point / sum(standard_points))
     except (ZeroDivisionError, ValueError, TypeError):
-        time_bracket = 60
+        time_bracket = timedelta(seconds=180)
 
-    return kill_id, kill_time, kill_score
+    return kill_id, kill_time, kill_score, time_bracket
 
 
 async def get_scores(session, rules, character_id):
@@ -87,7 +87,7 @@ async def get_scores(session, rules, character_id):
 
     zkill_url = f"https://zkillboard.com/api/kills/characterID/{character_id}/kills/"
 
-    ids_and_scores = {}
+    usable_kills = {}
     over = False
 
     page = 1
@@ -114,25 +114,39 @@ async def get_scores(session, rules, character_id):
         tasks = []
         for kill_id, kill_hash in kills_and_hashes:
             if kill_id in known_kills:
-                kill_time, kill_score = known_kills[kill_id]
+                kill_time, kill_score, time_bracket = known_kills[kill_id]
                 # If a kill is too far in the past, then we do not include it
                 if kill_time > start:
-                    ids_and_scores[kill_id] = kill_score
+                    usable_kills[kill_id] = (kill_time, kill_score, time_bracket)
                 else:
                     over = True
             else:
                 tasks.append(get_kill_score(session, kill_id, kill_hash, rules, character_id))
 
         # Fill in the gaps and update cache
-        for kill_id, kill_time, kill_score in await asyncio.gather(*tasks):
-            known_kills[kill_id] = (kill_time, kill_score)
+        for kill_id, kill_time, kill_score, time_bracket in await asyncio.gather(*tasks):
+            known_kills[kill_id] = (kill_time, kill_score, time_bracket)
 
             if kill_time > start:
-                ids_and_scores[kill_id] = kill_score
+                usable_kills[kill_id] = (kill_time, kill_score, time_bracket)
             else:
                 over = True
 
-    return ids_and_scores
+    # Collate kills based on their time bracket
+    groups = {}
+    last_time = None
+    last_id = None
+    for kill_id, (kill_time, kill_score, time_bracket) in sorted(usable_kills.items(), key=lambda x: x[0]):
+        if kill_score > 0:
+            if last_time and kill_time - time_bracket < max(last_time):
+                groups[last_id] += kill_score
+                last_time.append(kill_time)
+            else:
+                last_id = kill_id
+                last_time = [kill_time]
+                groups[last_id] = kill_score
+
+    return groups
 
 
 async def get_total_score(session, rules, character_id):
