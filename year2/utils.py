@@ -81,12 +81,14 @@ async def get_kill(session, kill_id, kill_hash):
 
 async def repeated_get(session, url) -> dict:
     async with session.get(url) as response:
-        for x in range(20):
+        for x in range(100):
             try:
                 if response.status == 200:
                     return await response.json(content_type=None)
             except json.decoder.JSONDecodeError:
                 pass
-            await asyncio.sleep(0.3 * x)
+
+            if x % 3 == 0:
+                await asyncio.sleep(0.1 * x)
 
         raise ValueError(f"Could not fetch data from url {url}!")
