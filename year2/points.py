@@ -12,7 +12,7 @@ async def get_kill_score(session, kill_id, kill_hash, rules, user_id=None):
     kill = await get_kill(session, kill_id, kill_hash)
 
     # Calculate points of each category
-    standard_victim_point = rules.rarity_adjusted_points(kill.get("victim", {}).get("ship_type_id", 0))
+    rarity_adjusted_victim_point = rules.rarity_adjusted_points(kill.get("victim", {}).get("ship_type_id", 0))
 
     standard_points = []
     risk_adjusted_pilot_point = None
@@ -28,10 +28,9 @@ async def get_kill_score(session, kill_id, kill_hash, rules, user_id=None):
     # Combine points into preliminary score
     try:
         if user_id:
-            kill_score = 10 * standard_victim_point / (risk_adjusted_pilot_point + sum(standard_points))
+            kill_score = 10 * rarity_adjusted_victim_point / (risk_adjusted_pilot_point + sum(standard_points))
         else:
-            print(standard_victim_point, standard_points)
-            kill_score = 10 * standard_victim_point / sum(standard_points)
+            kill_score = 10 * rarity_adjusted_victim_point / sum(standard_points)
 
     except (ZeroDivisionError, ValueError, TypeError):
         kill_score = 0
@@ -69,10 +68,10 @@ async def get_kill_score(session, kill_id, kill_hash, rules, user_id=None):
     for attacker in kill.get("attackers", []):
         if "character_id" in attacker:
             standard_points.append(rules.points(attacker.get("ship_type_id", 0)))
-    standard_victim_point = rules.points(kill.get("victim", {}).get("ship_type_id", 0))
+    rarity_adjusted_victim_point = rules.points(kill.get("victim", {}).get("ship_type_id", 0))
 
     try:
-        time_bracket = timedelta(seconds=180 * standard_victim_point / sum(standard_points))
+        time_bracket = timedelta(seconds=180 * rarity_adjusted_victim_point / sum(standard_points))
     except (ZeroDivisionError, ValueError, TypeError):
         time_bracket = timedelta(seconds=180)
 

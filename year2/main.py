@@ -157,7 +157,7 @@ async def explain(ctx, link):
 
             kill_id = int(link.split("/")[-2])
             kill_hash = await get_hash(session, kill_id)
-            kill_id, kill_time, kill_score = await get_kill_score(session, kill_id, kill_hash, rules)
+            kill_id, kill_time, kill_score, time_bracket = await get_kill_score(session, kill_id, kill_hash, rules)
             await ctx.channel.send(f"This [kill](https://zkillboard.com/kill/{kill_id}/) is worth {kill_score:.1f} points.\n"
                                    f"(Without factoring in risk of any one attacker)")
 
