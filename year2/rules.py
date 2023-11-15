@@ -25,6 +25,9 @@ class RulesConnector:
 
         self.last_updated = None
 
+    def __str__(self):
+        return f"Points {len(self._points)} with Rarity: {len(self._rarity_adjusted_points)} with Risk {len(self._risk_adjusted_points)}"
+
     async def update(self, session):
         if self.last_updated is None or self.last_updated < datetime.now() - timedelta(minutes=5):
             self.last_updated = datetime.now()

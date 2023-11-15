@@ -2,7 +2,7 @@ import asyncio
 import json
 from datetime import datetime, timedelta
 
-from utils import get_system_security, get_item_metalevel, get_ship_slots, get_kill, get_hash
+from utils import get_system_security, get_item_metalevel, get_ship_slots, get_kill
 
 known_kills = {}
 
@@ -17,20 +17,34 @@ async def get_kill_score(session, kill_id, kill_hash, rules, user_id=None):
     standard_points = []
     risk_adjusted_pilot_point = None
 
-    for attacker in kill.get("attackers", []):
-        if "character_id" in attacker:
-            if int(attacker["character_id"]) == user_id:
-                if "ship_type_id" in attacker:
-                    risk_adjusted_pilot_point = rules.risk_adjusted_points(attacker["ship_type_id"])
-            else:
-                standard_points.append(rules.points(attacker.get("ship_type_id", 0)))
+    # If we have a defined protagonist, we go through all the attackers and assign points
+    # The protagonist must fly some ship, otherwise 0 points, and only player characters count
+    # Helpers get added as "unknown ship" if we can't figure out what they fly.
+    if user_id:
+        for attacker in kill.get("attackers", []):
+            if "character_id" in attacker:
+                if int(attacker["character_id"]) == user_id:
+                    if "ship_type_id" in attacker:
+                        risk_adjusted_pilot_point = rules.risk_adjusted_points(attacker["ship_type_id"])
+                else:
+                    standard_points.append(rules.points(attacker.get("ship_type_id", 0)))
+
+    # If we don't have a clear protagonist, we have to assign one
+    # First we collect all the points without protagonist, and use the risk adjusted point
+    # To collect the difference (negative) if a guy were the protagonist
+    else:
+        risk_adjusted_pilot_point = 0
+        for attacker in kill.get("attackers", []):
+            if "character_id" in attacker:
+                standard_point = rules.points(attacker.get("ship_type_id", 0))
+                risk_point = rules.risk_adjusted_points(attacker.get("ship_type_id", 0))
+                standard_points.append(standard_point)
+                if risk_point and standard_point:
+                    risk_adjusted_pilot_point = min(risk_adjusted_pilot_point, risk_point - standard_point)
 
     # Combine points into preliminary score
     try:
-        if user_id:
-            kill_score = 10 * rarity_adjusted_victim_point / (risk_adjusted_pilot_point + sum(standard_points))
-        else:
-            kill_score = 10 * rarity_adjusted_victim_point / sum(standard_points)
+        kill_score = 10 * rarity_adjusted_victim_point / (risk_adjusted_pilot_point + sum(standard_points))
 
     except (ZeroDivisionError, ValueError, TypeError):
         kill_score = 0
@@ -108,6 +122,9 @@ async def get_scores(session, rules, character_id):
             kills_and_hashes = kills.items()
         else:
             kills_and_hashes = [[kill["killmail_id"], kill["zkb"]["hash"]] for kill in kills]
+
+        # Filter out wired kills that do not actually exist !?
+        kills_and_hashes = [(k, h) for k, h in kills_and_hashes if h != "CCP VERIFIED"]
 
         # Find all kills that are already in cache
         tasks = []

@@ -89,6 +89,7 @@ async def unlink(ctx):
     except KeyError:
         await ctx.send(f"You do not have any linked character!")
 
+
 @bot.command()
 async def points(ctx):
     try:
@@ -103,6 +104,7 @@ async def points(ctx):
         await ctx.send("Could not get all required responses from ESI / Zkill!")
     except _gdbm.error:
         await ctx.send("Currently busy with another command!")
+
 
 @bot.command()
 async def leaderboard(ctx):
@@ -126,6 +128,7 @@ async def leaderboard(ctx):
         await ctx.send("Could not get all required responses from ESI / Zkill!")
     except _gdbm.error:
         await ctx.send("Currently busy with another command!")
+
 
 @bot.command()
 async def breakdown(ctx):
@@ -154,12 +157,14 @@ async def breakdown(ctx):
 async def explain(ctx, link):
     try:
         async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
+            await rules.update(session)
 
             kill_id = int(link.split("/")[-2])
             kill_hash = await get_hash(session, kill_id)
             kill_id, kill_time, kill_score, time_bracket = await get_kill_score(session, kill_id, kill_hash, rules)
-            await ctx.channel.send(f"This [kill](https://zkillboard.com/kill/{kill_id}/) is worth {kill_score:.1f} points.\n"
-                                   f"(Without factoring in risk of any one attacker)")
+            await ctx.channel.send(
+                f"This [kill](https://zkillboard.com/kill/{kill_id}/) is worth {kill_score:.1f} points\n"
+                f" when using the largest ship as the ship of the contestant.")
 
     except ValueError:
         await ctx.channel.send("Could not get all required responses from ESI / Zkill!")
