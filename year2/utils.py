@@ -89,9 +89,9 @@ async def repeated_get(session, url) -> dict:
                 pass
 
             print("Retry", x, response.status, url)
-            if x % 2 == 0:
-                await asyncio.sleep(0.2 * x ** 3)
+            if x % 2:
+                await asyncio.sleep(0.5 * x ** 3)
             else:
-                await asyncio.sleep(0.2)
+                await asyncio.sleep(0.5)
 
         raise ValueError(f"Could not fetch data from url {url}!")
