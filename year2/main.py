@@ -172,4 +172,12 @@ async def explain(ctx, link):
         await ctx.send("Could not parse that link!")
 
 
+# Run leaderboard command once to prefetch cache
+class CtxDummy(object):
+    async def send(self, text):
+        return
+
+
+asyncio.run(leaderboard(CtxDummy()))
+
 bot.run(TOKEN)
