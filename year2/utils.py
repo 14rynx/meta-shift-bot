@@ -81,7 +81,7 @@ async def get_kill(session, kill_id, kill_hash):
 
 async def repeated_get(session, url) -> dict:
     async with session.get(url) as response:
-        for x in range(10):
+        for x in range(6):
             try:
                 if response.status == 200:
                     return await response.json(content_type=None)
