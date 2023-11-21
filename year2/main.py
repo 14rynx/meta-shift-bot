@@ -104,7 +104,8 @@ async def points(ctx):
         await ctx.send("Could not get all required responses from ESI / Zkill!")
     except _gdbm.error:
         await ctx.send("Currently busy with another command!")
-
+    except KeyError:
+        await ctx.send(f"You do not have any linked character!")
 
 @bot.command()
 async def leaderboard(ctx):
