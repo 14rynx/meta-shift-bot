@@ -50,8 +50,8 @@ async def get_item_metalevel(session, type_id):
     for dogma_attribute in (await repeated_get(session, f"https://esi.evetech.net/latest/universe/types/{type_id}/"))[
         "dogma_attributes"]:
         if int(dogma_attribute.get("attribute_id", 0)) in [1692, 633]:
-            return float(dogma_attribute.get("value", 0.0))
-    return 0.0
+            return float(dogma_attribute.get("value", 5.0))
+    return 5.0
 
 
 @async_lru.alru_cache(maxsize=500)
