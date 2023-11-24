@@ -1,7 +1,3 @@
 credentials.json
-year2/secrets.json
-year1/secrets.json
-
 .idea
-/year1/data/
-/year2/data/
+.env

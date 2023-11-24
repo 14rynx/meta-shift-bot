@@ -1,6 +1,5 @@
 import _gdbm
 import asyncio
-import json
 import os
 import shelve
 import ssl
@@ -13,9 +12,6 @@ from discord.ext import commands
 from points import get_total_score, get_scores, get_kill_score
 from rules import RulesConnector
 from utils import lookup, get_hash
-
-with open('secrets.json', "r") as f:
-    TOKEN = json.loads(f.read())["TOKEN"]
 
 intent = discord.Intents.default()
 intent.messages = True
@@ -107,6 +103,7 @@ async def points(ctx):
     except KeyError:
         await ctx.send(f"You do not have any linked character!")
 
+
 @bot.command()
 async def leaderboard(ctx):
     try:
@@ -175,10 +172,10 @@ async def explain(ctx, link):
 
 # Run leaderboard command once to prefetch cache
 class CtxDummy(object):
-    async def send(self, text):
+    async def send(self, text, **kwargs):
         return
 
 
 asyncio.run(leaderboard(CtxDummy()))
 
-bot.run(TOKEN)
+bot.run(os.environ["TOKEN"])

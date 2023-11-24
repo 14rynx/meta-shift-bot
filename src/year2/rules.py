@@ -1,14 +1,10 @@
-import json
+import os
 from datetime import datetime, timedelta
 
 from apiclient import discovery
 from google.oauth2 import service_account
 
 from utils import get_item_name
-
-# The ID and range of a sample spreadsheet.
-with open('secrets.json', "r") as f:
-    SPREADSHEET_ID = json.loads(f.read())["SPREADSHEET_ID"]
 
 
 class RulesConnector:
@@ -34,7 +30,7 @@ class RulesConnector:
 
             scopes = ["https://www.googleapis.com/auth/drive", "https://www.googleapis.com/auth/drive.file",
                       "https://www.googleapis.com/auth/spreadsheets"]
-            credentials = service_account.Credentials.from_service_account_file("../credentials.json", scopes=scopes)
+            credentials = service_account.Credentials.from_service_account_file("credentials.json", scopes=scopes)
             service = discovery.build('sheets', 'v4', credentials=credentials)
             sheet = service.spreadsheets()
 
@@ -56,7 +52,7 @@ class RulesConnector:
 
         end = chr(ord(start) + 1)
         _range = f'Season {self.season_id}!{start}3:{end}'
-        result = sheet.values().get(spreadsheetId=SPREADSHEET_ID, range=_range).execute()
+        result = sheet.values().get(spreadsheetId=os.environ["SPREADSHEET_ID"], range=_range).execute()
         values = result.get('values', [])
 
         out = {}
@@ -74,7 +70,7 @@ class RulesConnector:
     async def _write_back(self, session, sheet, service, start, type_ids):
         body = {'values': [[type_id, "TODO", await get_item_name(session, type_id)] for type_id in type_ids]}
 
-        result = sheet.values().get(spreadsheetId=SPREADSHEET_ID,
+        result = sheet.values().get(spreadsheetId=os.environ["SPREADSHEET_ID"],
                                     range=f'Season {self.season_id}!{start}3:{start}').execute()
         values = result.get('values', [])
         start_column = len(values) + 3
@@ -83,7 +79,7 @@ class RulesConnector:
         end = chr(ord(start) + 3)
 
         service.spreadsheets().values().update(
-            spreadsheetId=SPREADSHEET_ID,
+            spreadsheetId=os.environ["SPREADSHEET_ID"],
             range=f'Season {self.season_id}!{start}{start_column}:{end}{end_column}',
             valueInputOption="USER_ENTERED", body=body
         ).execute()
