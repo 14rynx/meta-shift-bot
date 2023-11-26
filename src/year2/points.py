@@ -2,7 +2,7 @@ import asyncio
 import json
 from datetime import datetime, timedelta
 
-from utils import get_system_security, get_item_metalevel, get_ship_slots, get_kill
+from utils import get_item_metalevel, get_ship_slots, get_kill
 
 known_kills = {}
 
@@ -49,8 +49,8 @@ async def get_kill_score(session, kill_id, kill_hash, rules, user_id=None):
     except (ZeroDivisionError, ValueError, TypeError):
         kill_score = 0
 
-    # Remove Highsec Kills
-    if await get_system_security(session, kill.get("solar_system_id", 30004759)) >= 0.5:
+    # Remove Tradehub Kills
+    if kill.get("solar_system_id", 0) in [30000142, 30002187, 30002510, 30002053, 30002659]:
         kill_score = 0
 
     # Figure out the metalevel of items

@@ -64,12 +64,6 @@ async def get_ship_slots(session, type_id):
     return slot_sum
 
 
-@async_lru.alru_cache(maxsize=10000)
-async def get_system_security(session, system_id):
-    return (await repeated_get(session, f"https://esi.evetech.net/latest/universe/systems/{system_id}/"))[
-        "security_status"]
-
-
 async def get_hash(session, kill_id):
     return (await repeated_get(session, f"https://zkillboard.com/api/kills/killID/{kill_id}/"))[0]["zkb"]["hash"]
 

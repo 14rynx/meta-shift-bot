@@ -129,11 +129,14 @@ async def leaderboard(ctx):
 
 
 @bot.command()
-async def breakdown(ctx):
+async def breakdown(ctx, *args):
     try:
         async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
             with shelve.open('data/linked_characters', writeback=True) as linked_characters:
-                author_id = str(ctx.author.id)
+                if args:
+                    author_id = await lookup(" ".join(args), 'characters')
+                else:
+                    author_id = str(ctx.author.id)
                 character_id = linked_characters[author_id]
                 await rules.update(session)
 

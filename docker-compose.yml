@@ -7,6 +7,6 @@ services:
     env_file:
       .env
     volumes:
-      - data:/year2/data
+      - data:/data
 volumes:
   data:
