@@ -134,14 +134,16 @@ async def breakdown(ctx, *args):
         async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
             with shelve.open('data/linked_characters', writeback=True) as linked_characters:
                 if args:
-                    author_id = await lookup(" ".join(args), 'characters')
+                    character_id = await lookup(" ".join(args), 'characters')
+                    output = " ".join(args) + "'s points distribution:\n"
                 else:
                     author_id = str(ctx.author.id)
-                character_id = linked_characters[author_id]
+                    output = f"<@{author_id}>'s points distribution:\n"
+
+                    character_id = linked_characters[author_id]
                 await rules.update(session)
 
                 ids_and_scores = await get_scores(session, rules, character_id)
-                output = f"<@{author_id}>'s points distribution:\n"
                 for kill_id, score in sorted(ids_and_scores.items(), key=lambda x: x[1], reverse=True)[0:30]:
                     output += f"[{score:.1f}](<https://zkillboard.com/kill/{kill_id}/>) "
                 await ctx.send(output, allowed_mentions=discord.AllowedMentions(users=False))
