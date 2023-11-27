@@ -134,8 +134,10 @@ async def breakdown(ctx, *args):
         async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
             with shelve.open('data/linked_characters', writeback=True) as linked_characters:
                 if args:
-                    character_id = await lookup(" ".join(args), 'characters')
-                    output = " ".join(args) + "'s points distribution:\n"
+                    character_name = " ".join(args)
+                    character_id = await lookup(character_name, 'characters')
+                    output = (f"[{character_name}](https://zkillboard.com/character/{character_id}/)"
+                              f"'s points distribution:\n")
                 else:
                     author_id = str(ctx.author.id)
                     output = f"<@{author_id}>'s points distribution:\n"
