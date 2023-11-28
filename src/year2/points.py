@@ -54,15 +54,23 @@ async def get_kill_score(session, kill_id, kill_hash, rules, user_id=None):
         kill_score = 0
 
     # Figure out the metalevel of items
+    slots = (await get_ship_slots(session, kill["victim"]["ship_type_id"]))
     meta_levels = []
-    for item in kill.get("victim", {}).get("items", []):
-        if 11 <= item.get("flag", 0) < 34:  # Item fitted to slots
-            meta_levels.append(await get_item_metalevel(session, item["item_type_id"]))
+    # Go through each rack, and collect the meta levels of (hopefully) non-ammo modules
+    for (rack_min_flag, rack_max_flag), rack_slots in zip([[11, 18], [19, 26], [27, 34]], slots):
+        for item in kill.get("victim", {}).get("items", []):
+            rack_meta_levels = []
+            if (rack_min_flag <= item.get("flag", 0) <= rack_max_flag and
+                    item.get("quantity_destroyed", 0) + item.get("quantity_dropped", 0) == 1):
+                rack_meta_levels.append(await get_item_metalevel(session, item["item_type_id"]))
+
+            # At most collect as many meta levels as there are slots
+            # Specifically if there is T2 ammo loaded do not count those as well
+            meta_levels.extend(sorted(rack_meta_levels, reverse=True)[:rack_slots])
 
     # Average the meta level in the best available way
-    slots = (await get_ship_slots(session, kill["victim"]["ship_type_id"]))
-    if slots > 0:
-        average_meta_level = sum(meta_levels) / slots
+    if sum(slots) > 0:
+        average_meta_level = sum(meta_levels) / sum(slots)
     elif len(meta_levels) > 0:
         average_meta_level = sum(meta_levels) / len(meta_levels)
     else:
@@ -82,12 +90,12 @@ async def get_kill_score(session, kill_id, kill_hash, rules, user_id=None):
     for attacker in kill.get("attackers", []):
         if "character_id" in attacker:
             standard_points.append(rules.points(attacker.get("ship_type_id", 0)))
-    rarity_adjusted_victim_point = rules.points(kill.get("victim", {}).get("ship_type_id", 0))
+    victim_point = rules.points(kill.get("victim", {}).get("ship_type_id", 0))
 
     try:
-        time_bracket = timedelta(seconds=180 * rarity_adjusted_victim_point / sum(standard_points))
+        time_bracket = timedelta(seconds=90 * victim_point / sum(standard_points))
     except (ZeroDivisionError, ValueError, TypeError):
-        time_bracket = timedelta(seconds=180)
+        time_bracket = timedelta(seconds=90)
 
     return kill_id, kill_time, kill_score, time_bracket
 
@@ -155,12 +163,12 @@ async def get_scores(session, rules, character_id):
     for kill_id, (kill_time, kill_score, time_bracket) in sorted(usable_kills.items(), key=lambda x: x[0]):
         if kill_score > 0:
             if last_time and kill_time - time_bracket < max(last_time):
-                groups[last_id] += kill_score
+                groups[last_id].append(kill_score)
                 last_time.append(kill_time)
             else:
                 last_id = kill_id
                 last_time = [kill_time]
-                groups[last_id] = kill_score
+                groups[last_id] = [kill_score]
 
     return groups
 
@@ -169,9 +177,10 @@ async def get_total_score(session, rules, character_id):
     """
     Sum up all the scores according to the competition rules
     """
-    ids_and_scores = await get_scores(session, rules, character_id)
+    groups = await get_scores(session, rules, character_id)
     try:
-        total_score = round(sum(sorted(ids_and_scores.values(), reverse=True)[:30]), 2)
+        collated_scores = [sum(group) for group in groups.values()]
+        total_score = round(sum(sorted(collated_scores, reverse=True)[:30]), 2)
     except ValueError:
         total_score = 0
     return total_score

@@ -19,8 +19,6 @@ intent.message_content = True
 client = discord.Client(intents=intent)
 
 bot = commands.Bot(command_prefix='!', intents=intent)
-bot.remove_command('help')
-
 rules = RulesConnector(1)
 
 ssl_context = ssl.create_default_context(cafile=certifi.where())
@@ -36,25 +34,11 @@ async def pass_trough(aid, session, rules, cid):
 
 
 @bot.command()
-async def help(ctx):
-    await ctx.send(
-        "\n".join([
-            "# Functions:",
-            "- `!link <character name or id>` to enter into the competition",
-            "- `!unlink` to exit (no data is lost, you can reenter at any time)",
-            "- `!points` to show your current standing",
-            "- `!leaderboard` to see top 10",
-            "- `!breakdown` to see your best kills",
-            "- `!explain <zkill link>` to see how many point a kill is worth"
-        ])
-    )
-
-
-@bot.command()
-async def link(ctx, *args):
+async def link(ctx, *character_name):
+    """Links your character to take part in the competition."""
     try:
         author_id = str(ctx.author.id)
-        character_name = " ".join(args)
+        character_name = " ".join(character_name)
         character_id = await lookup(character_name, 'characters')
 
         with shelve.open('data/linked_characters', writeback=True) as linked_characters:
@@ -73,6 +57,7 @@ async def link(ctx, *args):
 
 @bot.command()
 async def unlink(ctx):
+    """Unlinks your character from the competition."""
     try:
         with shelve.open('data/linked_characters', writeback=True) as linked_characters:
 
@@ -88,6 +73,7 @@ async def unlink(ctx):
 
 @bot.command()
 async def points(ctx):
+    """Shows your current point total."""
     try:
         async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
             with shelve.open('data/linked_characters', writeback=True) as linked_characters:
@@ -105,7 +91,11 @@ async def points(ctx):
 
 
 @bot.command()
-async def leaderboard(ctx):
+async def leaderboard(ctx, top):
+    """Shows the current people with the most points."""
+    if not top:
+        top = 10
+
     try:
         async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
             with shelve.open('data/linked_characters', writeback=True) as linked_characters:
@@ -116,7 +106,7 @@ async def leaderboard(ctx):
 
                 output = "# Leaderboard\n"
                 count = 1
-                for aid, cid, score in sorted(board, reverse=True, key=lambda x: x[2])[:30]:
+                for aid, cid, score in sorted(board, reverse=True, key=lambda x: x[2])[:top]:
                     output += f"{count}: <@{aid}> with {score:.1f} points\n"
                     count += 1
 
@@ -129,12 +119,13 @@ async def leaderboard(ctx):
 
 
 @bot.command()
-async def breakdown(ctx, *args):
+async def breakdown(ctx, *character_name):
+    """Shows a breakdown of how you achieved your points."""
     try:
         async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
             with shelve.open('data/linked_characters', writeback=True) as linked_characters:
-                if args:
-                    character_name = " ".join(args)
+                if character_name:
+                    character_name = " ".join(character_name)
                     character_id = await lookup(character_name, 'characters')
                     output = (f"[{character_name}](https://zkillboard.com/character/{character_id}/)"
                               f"'s points distribution:\n")
@@ -145,9 +136,15 @@ async def breakdown(ctx, *args):
                     character_id = linked_characters[author_id]
                 await rules.update(session)
 
-                ids_and_scores = await get_scores(session, rules, character_id)
-                for kill_id, score in sorted(ids_and_scores.items(), key=lambda x: x[1], reverse=True)[0:30]:
-                    output += f"[{score:.1f}](<https://zkillboard.com/kill/{kill_id}/>) "
+                point_strings = []
+                groups = await get_scores(session, rules, character_id)
+                for kill_id, scores in sorted(groups.items(), key=lambda group: sum(group[1]), reverse=True)[0:30]:
+                    point_string = f"[**{sum(scores):.1f}**](<https://zkillboard.com/kill/{kill_id}/>)"
+                    if len(scores) > 1:
+                        summary = " + ".join([f"{s:.1f}" for s in scores])
+                        point_string += f" ({summary})"
+                    point_strings.append(point_string)
+                output += ",   ".join(point_strings)
                 await ctx.send(output, allowed_mentions=discord.AllowedMentions(users=False))
 
     except ValueError:
@@ -159,12 +156,13 @@ async def breakdown(ctx, *args):
 
 
 @bot.command()
-async def explain(ctx, link):
+async def explain(ctx, zkill_link):
+    """Shows the total amount of points for some kill."""
     try:
         async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
             await rules.update(session)
 
-            kill_id = int(link.split("/")[-2])
+            kill_id = int(zkill_link.split("/")[-2])
             kill_hash = await get_hash(session, kill_id)
             kill_id, kill_time, kill_score, time_bracket = await get_kill_score(session, kill_id, kill_hash, rules)
             await ctx.channel.send(
@@ -183,6 +181,7 @@ class CtxDummy(object):
         return
 
 
-asyncio.run(leaderboard(CtxDummy()))
+if "SEED" in os.environ:
+    asyncio.run(leaderboard(CtxDummy()))
 
 bot.run(os.environ["TOKEN"])
