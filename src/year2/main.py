@@ -91,9 +91,9 @@ async def points(ctx):
 
 
 @bot.command()
-async def leaderboard(ctx, top):
+async def leaderboard(ctx, top=None):
     """Shows the current people with the most points."""
-    if not top:
+    if top is None:
         top = 10
 
     try:
