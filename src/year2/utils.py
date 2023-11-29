@@ -47,10 +47,13 @@ async def get_item_name(session, type_id):
 
 @async_lru.alru_cache(maxsize=40000)
 async def get_item_metalevel(session, type_id):
-    for dogma_attribute in (await repeated_get(session, f"https://esi.evetech.net/latest/universe/types/{type_id}/"))[
-        "dogma_attributes"]:
-        if int(dogma_attribute.get("attribute_id", 0)) in [1692, 633]:
-            return float(dogma_attribute.get("value", 5.0))
+    try:
+        for dogma_attribute in (await repeated_get(session, f"https://esi.evetech.net/latest/universe/types/{type_id}/"))[
+            "dogma_attributes"]:
+            if int(dogma_attribute.get("attribute_id", 0)) in [1692, 633]:
+                return float(dogma_attribute.get("value", 5.0))
+    except KeyError:
+        pass
     return 5.0
 
 
@@ -67,7 +70,7 @@ async def get_ship_slots(session, type_id):
             low_slots = attribute_value
         elif attribute_id == 13:
             mid_slots = attribute_value
-        elif attribute_id == 15:
+        elif attribute_id == 14:
             high_slots = attribute_value
     return low_slots, mid_slots, high_slots
 

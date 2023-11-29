@@ -54,25 +54,25 @@ async def get_kill_score(session, kill_id, kill_hash, rules, user_id=None):
         kill_score = 0
 
     # Figure out the metalevel of items
-    slots = (await get_ship_slots(session, kill["victim"]["ship_type_id"]))
-    meta_levels = []
-    # Go through each rack, and collect the meta levels of (hopefully) non-ammo modules
-    for (rack_min_flag, rack_max_flag), rack_slots in zip([[11, 18], [19, 26], [27, 34]], slots):
-        for item in kill.get("victim", {}).get("items", []):
-            rack_meta_levels = []
-            if (rack_min_flag <= item.get("flag", 0) <= rack_max_flag and
-                    item.get("quantity_destroyed", 0) + item.get("quantity_dropped", 0) == 1):
-                rack_meta_levels.append(await get_item_metalevel(session, item["item_type_id"]))
-
-            # At most collect as many meta levels as there are slots
-            # Specifically if there is T2 ammo loaded do not count those as well
-            meta_levels.extend(sorted(rack_meta_levels, reverse=True)[:rack_slots])
+    # Go through each slot, and find the module with the highest meta level in it to filter out ammo with meta level
+    meta_levels = {}
+    for item in kill.get("victim", {}).get("items", []):
+        flag = int(item.get("flag", 0))
+        meta_level = await get_item_metalevel(session, item["item_type_id"])
+        quantity = int(item.get("quantity_destroyed", 0) + item.get("quantity_dropped", 0))
+        if 11 <= flag <= 34 and quantity == 1:
+            if flag in meta_levels:
+                meta_levels[flag] = max(meta_level, meta_levels[flag])
+            else:
+                meta_levels[flag] = meta_level
 
     # Average the meta level in the best available way
+    slots = (await get_ship_slots(session, kill["victim"]["ship_type_id"]))
+
     if sum(slots) > 0:
-        average_meta_level = sum(meta_levels) / sum(slots)
+        average_meta_level = sum(meta_levels.values()) / sum(slots)
     elif len(meta_levels) > 0:
-        average_meta_level = sum(meta_levels) / len(meta_levels)
+        average_meta_level = sum(meta_levels.values()) / len(meta_levels.values())
     else:
         average_meta_level = 5  # T2
 
