@@ -155,9 +155,12 @@ async def get_score_groups(session, rules, character_id):
         # Update per character cache and get kills from it if there are any
         if character_id in character_cache:
             character_cache[character_id].extend(kills_and_hashes)
-            kills_and_hashes = character_cache[character_id]
         else:
             character_cache[character_id] = kills_and_hashes
+
+        # If our page connects to the cache, pull the entire cache, most likely ending the loop
+        if set(kills_and_hashes) & set(character_cache[character_id]):
+            kills_and_hashes = character_cache[character_id]
 
         # Find all kills that are already in cache
         tasks = []
