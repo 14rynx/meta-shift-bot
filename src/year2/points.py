@@ -100,7 +100,7 @@ async def get_kill_score(session, kill_id, kill_hash, rules, user_id=None):
     return kill_id, kill_time, kill_score, time_bracket
 
 
-async def get_scores(session, rules, character_id):
+async def get_score_groups(session, rules, character_id):
     """
     Fetch all kills of a character for some period from zkill and do point calculation
     """
@@ -163,24 +163,26 @@ async def get_scores(session, rules, character_id):
     for kill_id, (kill_time, kill_score, time_bracket) in sorted(usable_kills.items(), key=lambda x: x[0]):
         if kill_score > 0:
             if last_time and kill_time - time_bracket < max(last_time):
-                groups[last_id].append(kill_score)
+                groups[last_id].append((kill_id, kill_score))
                 last_time.append(kill_time)
             else:
                 last_id = kill_id
                 last_time = [kill_time]
-                groups[last_id] = [kill_score]
+                groups[last_id] = [(kill_id, kill_score)]
 
-    return groups
+    # Now rearrange scores with total_score: kills
+    score_groups = [(sum([s for i, s in kills]), kills) for last_id, kills in groups.items()]
+    return score_groups
 
 
 async def get_total_score(session, rules, character_id):
     """
     Sum up all the scores according to the competition rules
     """
-    groups = await get_scores(session, rules, character_id)
+    score_groups = await get_score_groups(session, rules, character_id)
     try:
-        collated_scores = [sum(group) for group in groups.values()]
-        total_score = round(sum(sorted(collated_scores, reverse=True)[:30]), 2)
+        scores = [s for s, kills in score_groups]
+        total_score = sum(sorted(scores, reverse=True)[:30])
     except ValueError:
         total_score = 0
-    return total_score
+    return round(total_score, 2)

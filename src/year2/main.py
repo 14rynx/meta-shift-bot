@@ -9,9 +9,9 @@ import certifi
 import discord
 from discord.ext import commands
 
-from points import get_total_score, get_scores, get_kill_score
+from points import get_total_score, get_score_groups, get_kill_score
 from rules import RulesConnector
-from utils import lookup, get_hash
+from utils import lookup, get_hash, send_large_message
 
 intent = discord.Intents.default()
 intent.messages = True
@@ -137,15 +137,19 @@ async def breakdown(ctx, *character_name):
                 await rules.update(session)
 
                 point_strings = []
-                groups = await get_scores(session, rules, character_id)
-                for kill_id, scores in sorted(groups.items(), key=lambda group: sum(group[1]), reverse=True)[0:30]:
-                    point_string = f"[**{sum(scores):.1f}**](<https://zkillboard.com/kill/{kill_id}/>)"
-                    if len(scores) > 1:
-                        summary = " + ".join([f"{s:.1f}" for s in scores])
-                        point_string += f" ({summary})"
+                groups = await get_score_groups(session, rules, character_id)
+                for total_score, kills in sorted(groups, reverse=True)[0:30]:
+                    if len(kills) == 1:
+                        point_string = f"[**{total_score:.1f}**](<https://zkillboard.com/kill/{kills[0][0]}/>)"
+                    else:
+                        point_string = f"**{total_score:.1f}** ("
+                        links = [f"[{s:.1f}](<https://zkillboard.com/kill/{i}/>)" for i, s in kills]
+                        point_string += " + ".join(links)
+                        point_string += ")"
                     point_strings.append(point_string)
-                output += ",   ".join(point_strings)
-                await ctx.send(output, allowed_mentions=discord.AllowedMentions(users=False))
+                output += ", ".join(point_strings)
+
+                await send_large_message(ctx, output, delimiter=",",  allowed_mentions=discord.AllowedMentions(users=False))
 
     except ValueError:
         await ctx.send("Could not get all required responses from ESI / Zkill!")
