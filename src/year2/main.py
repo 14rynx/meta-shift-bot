@@ -102,11 +102,45 @@ async def leaderboard(ctx, top=None):
                 await rules.update(session)
                 tasks = [pass_trough(author, session, rules, character_id) for author, character_id in
                          linked_characters.items()]
-                board = await asyncio.gather(*tasks)
+                user_scores = await asyncio.gather(*tasks)
 
                 output = "# Leaderboard\n"
                 count = 1
-                for aid, cid, score in sorted(board, reverse=True, key=lambda x: x[2])[:top]:
+                for aid, cid, score in sorted(user_scores, reverse=True, key=lambda x: x[2])[:top]:
+                    output += f"{count}: <@{aid}> with {score:.1f} points\n"
+                    count += 1
+
+                await ctx.send(output, allowed_mentions=discord.AllowedMentions(users=False))
+
+    except ValueError:
+        await ctx.send("Could not get all required responses from ESI / Zkill!")
+    except _gdbm.error:
+        await ctx.send("Currently busy with another command!")
+
+
+@bot.command()
+async def ranking(ctx):
+    """Shows the people around your current score."""
+
+    try:
+        async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
+            with shelve.open('data/linked_characters', writeback=True) as linked_characters:
+                await rules.update(session)
+                tasks = [pass_trough(author, session, rules, character_id) for author, character_id in
+                         linked_characters.items()]
+                user_scores = await asyncio.gather(*tasks)
+
+                author_id = str(ctx.author.id)
+                users_leaderboard = sorted(user_scores, reverse=True, key=lambda x: x[2])
+
+                author_ids = [aid for aid, _, _ in users_leaderboard]
+
+                middle = author_ids.index(author_id)
+                first = max(middle - 2, 0)
+                last = min(middle + 3, len(users_leaderboard))
+                output = "# Leaderboard\n (around your position)\n"
+                count = first + 1
+                for aid, cid, score in sorted(user_scores, reverse=True, key=lambda x: x[2])[first:last]:
                     output += f"{count}: <@{aid}> with {score:.1f} points\n"
                     count += 1
 
@@ -149,7 +183,8 @@ async def breakdown(ctx, *character_name):
                     point_strings.append(point_string)
                 output += ", ".join(point_strings)
 
-                await send_large_message(ctx, output, delimiter=",",  allowed_mentions=discord.AllowedMentions(users=False))
+                await send_large_message(ctx, output, delimiter=",",
+                                         allowed_mentions=discord.AllowedMentions(users=False))
 
     except ValueError:
         await ctx.send("Could not get all required responses from ESI / Zkill!")
