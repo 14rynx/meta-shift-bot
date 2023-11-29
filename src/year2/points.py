@@ -1,5 +1,6 @@
 import asyncio
 import json
+import math
 from datetime import datetime, timedelta
 
 from utils import get_item_metalevel, get_ship_slots, get_kill
@@ -77,7 +78,23 @@ async def get_kill_score(session, kill_id, kill_hash, rules, user_id=None):
         average_meta_level = 5  # T2
 
     # Adjust score based on meta level
-    kill_score *= (0.5 + 0.1 * average_meta_level)
+    # Parameters
+    neutral_input = 5
+    neutral_output = 1
+    expo = 0.8
+    scaling = 0.5
+
+    # Linearly scale meta level into the range -1 ... something, with 0 for neutral element
+    linear = (average_meta_level - neutral_input) / neutral_input
+
+    # Apply exponentiation so that values of -1 and 1 stay the same, then scale the output
+    exponential = linear * math.exp(abs(linear * expo)) * (scaling / math.exp(expo))
+
+    # Move neutral element to desired output
+    factor = exponential + neutral_output
+
+    # Apply factor to score
+    kill_score *= factor
 
     # Find time of killmail for cache
     if "killmail_time" in kill:
