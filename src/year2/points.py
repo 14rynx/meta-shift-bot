@@ -5,7 +5,8 @@ from datetime import datetime, timedelta
 
 from utils import get_item_metalevel, get_ship_slots, get_kill
 
-known_kills = {}
+kill_cache = {}
+character_cache = {}
 
 
 async def get_kill_score(session, kill_id, kill_hash, rules, user_id=None):
@@ -151,11 +152,18 @@ async def get_score_groups(session, rules, character_id):
         # Filter out wired kills that do not actually exist !?
         kills_and_hashes = [(k, h) for k, h in kills_and_hashes if h != "CCP VERIFIED"]
 
+        # Update per character cache and get kills from it if there are any
+        if character_id in character_cache:
+            character_cache[character_id].extend(kills_and_hashes)
+            kills_and_hashes = character_cache[character_id]
+        else:
+            character_cache[character_id] = kills_and_hashes
+
         # Find all kills that are already in cache
         tasks = []
         for kill_id, kill_hash in kills_and_hashes:
-            if kill_id in known_kills:
-                kill_time, kill_score, time_bracket = known_kills[kill_id]
+            if kill_id in kill_cache:
+                kill_time, kill_score, time_bracket = kill_cache[kill_id]
                 # If a kill is too far in the past, then we do not include it
                 if kill_time > start:
                     usable_kills[kill_id] = (kill_time, kill_score, time_bracket)
@@ -166,7 +174,7 @@ async def get_score_groups(session, rules, character_id):
 
         # Fill in the gaps and update cache
         for kill_id, kill_time, kill_score, time_bracket in await asyncio.gather(*tasks):
-            known_kills[kill_id] = (kill_time, kill_score, time_bracket)
+            kill_cache[kill_id] = (kill_time, kill_score, time_bracket)
 
             if kill_time > start:
                 usable_kills[kill_id] = (kill_time, kill_score, time_bracket)
