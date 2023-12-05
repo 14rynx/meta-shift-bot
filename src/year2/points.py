@@ -122,7 +122,8 @@ async def get_score_groups(session, rules, character_id):
     """
     Fetch all kills of a character for some period from zkill and do point calculation
     """
-    start = datetime.utcnow() - timedelta(days=90)  # TODO: Fix according to timespan
+    start = datetime.utcnow() - timedelta(days=90)
+    end = datetime.utcnow() - timedelta(days=1)
 
     zkill_url = f"https://zkillboard.com/api/kills/characterID/{character_id}/kills/"
 
@@ -168,9 +169,9 @@ async def get_score_groups(session, rules, character_id):
             if kill_id in kill_cache:
                 kill_time, kill_score, time_bracket = kill_cache[kill_id]
                 # If a kill is too far in the past, then we do not include it
-                if kill_time > start:
+                if start < kill_time < end:
                     usable_kills[kill_id] = (kill_time, kill_score, time_bracket)
-                else:
+                elif kill_time < start:
                     over = True
             else:
                 tasks.append(get_kill_score(session, kill_id, kill_hash, rules, character_id))
@@ -179,9 +180,9 @@ async def get_score_groups(session, rules, character_id):
         for kill_id, kill_time, kill_score, time_bracket in await asyncio.gather(*tasks):
             kill_cache[kill_id] = (kill_time, kill_score, time_bracket)
 
-            if kill_time > start:
+            if start < kill_time < end:
                 usable_kills[kill_id] = (kill_time, kill_score, time_bracket)
-            else:
+            elif kill_time < start:
                 over = True
 
     # Collate kills based on their time bracket
