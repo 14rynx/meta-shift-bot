@@ -45,10 +45,19 @@ async def get_item_name(session, type_id):
         return f"Type ID: {type_id}"
 
 
+@async_lru.alru_cache(maxsize=1000)
+async def get_character_name(session, character_id):
+    async with session.get(f"https://esi.evetech.net/latest/characters/{character_id}/") as response:
+        if response.status == 200:
+            return (await response.json(content_type=None))["name"]
+        return f"CID: {character_id}"
+
+
 @async_lru.alru_cache(maxsize=40000)
 async def get_item_metalevel(session, type_id):
     try:
-        for dogma_attribute in (await repeated_get(session, f"https://esi.evetech.net/latest/universe/types/{type_id}/"))[
+        for dogma_attribute in \
+        (await repeated_get(session, f"https://esi.evetech.net/latest/universe/types/{type_id}/"))[
             "dogma_attributes"]:
             if int(dogma_attribute.get("attribute_id", 0)) in [1692, 633]:
                 return float(dogma_attribute.get("value", 5.0))

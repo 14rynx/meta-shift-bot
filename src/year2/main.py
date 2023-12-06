@@ -11,7 +11,7 @@ from discord.ext import commands
 
 from points import get_total_score, get_score_groups, get_kill_score
 from rules import RulesConnector
-from utils import lookup, get_hash, send_large_message
+from utils import lookup, get_hash, send_large_message, get_character_name
 
 intent = discord.Intents.default()
 intent.messages = True
@@ -81,8 +81,10 @@ async def leaderboard(ctx, top=None):
 
             output = "# Leaderboard\n"
             count = 1
+
             for aid, cid, score in sorted(user_scores, reverse=True, key=lambda x: x[2])[:top]:
-                output += f"{count}: <@{aid}> with {score:.1f} points\n"
+                output += (f"{count}: <@{aid}> [{await get_character_name(session, cid)}](<https://zkillboard.com/"
+                           f"character/{cid}/>) with {score:.1f} points\n")
                 count += 1
 
             await ctx.send(output, allowed_mentions=discord.AllowedMentions(users=False))
@@ -115,7 +117,8 @@ async def ranking(ctx):
             output = "# Leaderboard\n (around your position)\n"
             count = first + 1
             for aid, cid, score in sorted(user_scores, reverse=True, key=lambda x: x[2])[first:last]:
-                output += f"{count}: <@{aid}> with {score:.1f} points\n"
+                output += (f"{count}: <@{aid}> [{await get_character_name(session, cid)}](<https://zkillboard.com/"
+                           f"character/{cid}/>) with {score:.1f} points\n")
                 count += 1
 
             await ctx.send(output, allowed_mentions=discord.AllowedMentions(users=False))
