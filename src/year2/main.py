@@ -31,10 +31,28 @@ async def pass_trough(aid, session, rules, cid):
 @bot.command()
 async def link(ctx, *character_name):
     """Links your character to take part in the competition."""
+    author_id = str(ctx.author.id)
+    character_name = " ".join(character_name)
     try:
-        author_id = str(ctx.author.id)
-        character_name = " ".join(character_name)
         character_id = await lookup(character_name, 'characters')
+    except ValueError:
+        await ctx.send(f"Could not resolve that character!")
+        return
+
+    try:
+        with shelve.open('data/relinks', writeback=True) as relinks:
+            if author_id not in relinks:
+                relinks[author_id] = 5
+            else:
+                if author_id not in ["183094368037502976", "242164531151765505"]:
+                    author_relinks = relinks[author_id] - 1
+                    if author_relinks > 0:
+                        relinks[author_id] = author_relinks
+                    else:
+                        await ctx.send("You ran out of relinks!")
+                        return
+                else:
+                    author_relinks = "Infinite"
 
         with shelve.open('data/linked_characters', writeback=True) as linked_characters:
             if author_id not in linked_characters:
@@ -43,11 +61,11 @@ async def link(ctx, *character_name):
             else:
                 linked_characters[author_id] = character_id
                 await ctx.send(f"Updated your linked character to "
-                               f"[{character_name}](https://zkillboard.com/character/{character_id}/)")
-    except ValueError:
-        await ctx.send(f"Could not resolve that character!")
+                               f"[{character_name}](https://zkillboard.com/character/{character_id}/) "
+                               f"({author_relinks} uses remaining)")
     except _gdbm.error:
         await ctx.send("Currently busy with another command!")
+        return
 
 
 @bot.command()
@@ -142,8 +160,13 @@ async def points(ctx, *character_name):
                           f"currently has {await get_total_score(session, rules, character_id)} points")
             else:
                 author_id = str(ctx.author.id)
-                with shelve.open('data/linked_characters', writeback=True) as linked_characters:
-                    character_id = linked_characters[author_id]
+                try:
+                    with shelve.open('data/linked_characters', writeback=True) as linked_characters:
+                        character_id = linked_characters[author_id]
+                except KeyError:
+                    await ctx.send(f"You do not have any linked character!")
+                    return
+
                 output = f"You currently have {await get_total_score(session, rules, character_id)} points"
             await ctx.send(output)
 
@@ -151,8 +174,6 @@ async def points(ctx, *character_name):
         await ctx.send("Could not get all required responses from ESI / Zkill!")
     except _gdbm.error:
         await ctx.send("Currently busy with another command!")
-    except KeyError:
-        await ctx.send(f"You do not have any linked character!")
 
 
 @bot.command()
@@ -169,8 +190,12 @@ async def breakdown(ctx, *character_name):
             else:
                 author_id = str(ctx.author.id)
                 output = f"<@{author_id}>'s points distribution:\n"
-                with shelve.open('data/linked_characters', writeback=True) as linked_characters:
-                    character_id = linked_characters[author_id]
+                try:
+                    with shelve.open('data/linked_characters', writeback=True) as linked_characters:
+                        character_id = linked_characters[author_id]
+                except KeyError:
+                    await ctx.send(f"You do not have any linked character!")
+                    return
 
             point_strings = []
             groups = await get_score_groups(session, rules, character_id)
@@ -191,8 +216,6 @@ async def breakdown(ctx, *character_name):
         await ctx.send("Could not get all required responses from ESI / Zkill!")
     except _gdbm.error:
         await ctx.send("Currently busy with another command!")
-    except KeyError:
-        await ctx.send(f"You do not have any linked character!")
 
 
 @bot.command()
@@ -202,7 +225,12 @@ async def explain(ctx, zkill_link):
         async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
             await rules.update(session)
 
-            kill_id = int(zkill_link.split("/")[-2])
+            try:
+                kill_id = int(zkill_link.split("/")[-2])
+            except IndexError:
+                await ctx.send("Could not parse that link!")
+                return
+
             kill_hash = await get_hash(session, kill_id)
             kill_id, kill_time, kill_score, time_bracket = await get_kill_score(session, kill_id, kill_hash, rules)
             await ctx.channel.send(f"This [kill](https://zkillboard.com/kill/{kill_id}/) is worth {kill_score:.1f} "
@@ -210,8 +238,6 @@ async def explain(ctx, zkill_link):
 
     except ValueError:
         await ctx.channel.send("Could not get all required responses from ESI / Zkill!")
-    except IndexError:
-        await ctx.send("Could not parse that link!")
 
 
 # Run leaderboard command once to prefetch cache
