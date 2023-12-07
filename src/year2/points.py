@@ -103,16 +103,22 @@ async def get_kill_score(session, kill_id, kill_hash, rules, user_id=None):
     else:
         kill_time = datetime.utcnow()
 
-    # Figure out time bracket allowed for this kill to be merged (To be used in future versions)
-    standard_points = []
+    # Figure out time bracket allowed for this kill to be merged
+    base_time = 30
+    scaling_time = 60
+    attacker_scaling = 1.6
+
+    attacker_points = []
     for attacker in kill.get("attackers", []):
         if "character_id" in attacker:
-            standard_points.append(rules.points(attacker.get("ship_type_id", 0)))
+            attacker_points.append(rules.points(attacker.get("ship_type_id", 0)) ** attacker_scaling)
 
     try:
-        time_bracket = timedelta(seconds=90 * rarity_adjusted_victim_point / sum(standard_points))
+        attacker_adjusted_points = sum(attacker_points) ** (1 / attacker_scaling)
+        time_bracket = timedelta(
+            seconds=base_time + scaling_time * rarity_adjusted_victim_point / attacker_adjusted_points)
     except (ZeroDivisionError, ValueError, TypeError):
-        time_bracket = timedelta(seconds=90)
+        time_bracket = timedelta(seconds=base_time + scaling_time)
 
     return kill_id, kill_time, kill_score, time_bracket
 
