@@ -108,10 +108,9 @@ async def get_kill_score(session, kill_id, kill_hash, rules, user_id=None):
     for attacker in kill.get("attackers", []):
         if "character_id" in attacker:
             standard_points.append(rules.points(attacker.get("ship_type_id", 0)))
-    victim_point = rules.points(kill.get("victim", {}).get("ship_type_id", 0))
 
     try:
-        time_bracket = timedelta(seconds=90 * victim_point / sum(standard_points))
+        time_bracket = timedelta(seconds=90 * rarity_adjusted_victim_point / sum(standard_points))
     except (ZeroDivisionError, ValueError, TypeError):
         time_bracket = timedelta(seconds=90)
 
