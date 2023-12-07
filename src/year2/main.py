@@ -43,6 +43,7 @@ async def link(ctx, *character_name):
         with shelve.open('data/relinks', writeback=True) as relinks:
             if author_id not in relinks:
                 relinks[author_id] = 5
+                author_relinks = 5
             else:
                 if author_id not in ["183094368037502976", "242164531151765505"]:
                     author_relinks = relinks[author_id] - 1
