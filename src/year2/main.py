@@ -244,7 +244,7 @@ async def breakdown(ctx, *character_name):
 
 
 @bot.command()
-async def explain(ctx, zkill_link):
+async def explain(ctx, zkill_link, *character_name):
     """Shows the total amount of points for some kill."""
 
     logger.info(f"{ctx.author.name} used !explain")
@@ -260,9 +260,17 @@ async def explain(ctx, zkill_link):
                 return
 
             kill_hash = await get_hash(session, kill_id)
-            kill_id, kill_time, kill_score, time_bracket = await get_kill_score(session, kill_id, kill_hash, rules)
-            await ctx.channel.send(f"This [kill](https://zkillboard.com/kill/{kill_id}/) is worth {kill_score:.1f} "
-                                   f"points\nwhen using the largest ship as the ship of the contestant.")
+            if character_name:
+                character_name = " ".join(character_name)
+                character_id = await lookup(character_name, 'characters')
+                kill_id, kill_time, kill_score, time_bracket = await get_kill_score(session, kill_id, kill_hash, rules,
+                                                                                    user_id=character_id)
+                await ctx.channel.send(f"This [kill](https://zkillboard.com/kill/{kill_id}/) is worth {kill_score:.1f} "
+                                       f"with the given character.")
+            else:
+                kill_id, kill_time, kill_score, time_bracket = await get_kill_score(session, kill_id, kill_hash, rules)
+                await ctx.channel.send(f"This [kill](https://zkillboard.com/kill/{kill_id}/) is worth {kill_score:.1f} "
+                                       f"points\nwhen using the largest ship as the ship of the contestant.")
 
     except ValueError:
         await ctx.channel.send("Could not get all required responses from ESI / Zkill!")
