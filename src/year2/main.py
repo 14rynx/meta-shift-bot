@@ -277,7 +277,15 @@ async def explain(ctx, zkill_link, *character_name):
 
 
 # Run leaderboard command once to prefetch cache
+class Attribute(object):
+    pass
+
+
 class CtxDummy(object):
+    def __init__(self):
+        self.author = Attribute()
+        self.author.name = "Prefetcher"
+
     async def send(self, text, **kwargs):
         return
 
