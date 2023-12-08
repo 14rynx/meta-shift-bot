@@ -1,5 +1,6 @@
 import _gdbm
 import asyncio
+import logging
 import os
 import shelve
 import ssl
@@ -9,10 +10,18 @@ import certifi
 import discord
 from discord.ext import commands
 
-from points import get_total_score, get_score_groups, get_kill_score
+from points import get_total_score, get_score_groups, get_kill_score, get_user_scores
 from rules import RulesConnector
 from utils import lookup, get_hash, send_large_message, get_character_name
 
+# Configure the logger
+logger = logging.getLogger('discord.main')
+logger.setLevel(logging.INFO)
+handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
+handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
+logger.addHandler(handler)
+
+# Setting up discord
 intent = discord.Intents.default()
 intent.messages = True
 intent.message_content = True
@@ -21,16 +30,15 @@ client = discord.Client(intents=intent)
 bot = commands.Bot(command_prefix='!', intents=intent)
 rules = RulesConnector(1)
 
+# Adding ssl context because aiohttp doesn't come with certificates
 ssl_context = ssl.create_default_context(cafile=certifi.where())
-
-
-async def pass_trough(aid, session, rules, cid):
-    return aid, cid, await get_total_score(session, rules, cid)
 
 
 @bot.command()
 async def link(ctx, *character_name):
     """Links your character to take part in the competition."""
+    logger.info(f"{ctx.author.name} used !link {character_name}")
+
     author_id = str(ctx.author.id)
     character_name = " ".join(character_name)
     try:
@@ -72,21 +80,29 @@ async def link(ctx, *character_name):
 @bot.command()
 async def unlink(ctx):
     """Unlinks your character from the competition."""
+    logger.info(f"{ctx.author.name} used !unlink")
+
+    author_id = str(ctx.author.id)
     try:
         with shelve.open('data/linked_characters', writeback=True) as linked_characters:
-            author_id = str(ctx.author.id)
             del linked_characters[author_id]
-            await ctx.send(f"Unlinked your character.")
-
     except _gdbm.error:
         await ctx.send("Currently busy with another command!")
     except KeyError:
         await ctx.send(f"You do not have any linked character!")
+    else:
+        await ctx.send(f"Unlinked your character.")
 
 
 @bot.command()
 async def leaderboard(ctx, top=None):
     """Shows the current people with the most points."""
+
+    logger.info(f"{ctx.author.name} used !leaderboard")
+
+    with shelve.open('data/linked_characters', writeback=True) as lc:
+        await ctx.send(f"Fetching leaderboard, this will take approximately {len(lc.items())} seconds.")
+
     if top is None:
         top = 10
 
@@ -94,9 +110,7 @@ async def leaderboard(ctx, top=None):
         async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
             await rules.update(session)
 
-            with shelve.open('data/linked_characters', writeback=True) as lc:
-                tasks = [pass_trough(author, session, rules, character_id) for author, character_id in lc.items()]
-            user_scores = await asyncio.gather(*tasks)
+            user_scores = await get_user_scores(session, rules)
 
             output = "# Leaderboard\n"
             count = 1
@@ -118,12 +132,16 @@ async def leaderboard(ctx, top=None):
 async def ranking(ctx):
     """Shows the people around your current score."""
 
+    logger.info(f"{ctx.author.name} used !ranking")
+
+    with shelve.open('data/linked_characters', writeback=True) as lc:
+        await ctx.send(f"Fetching ranking, this will take approximately {len(lc.items())} seconds.")
+
     try:
         async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
             await rules.update(session)
-            with shelve.open('data/linked_characters', writeback=True) as lc:
-                tasks = [pass_trough(author, session, rules, character_id) for author, character_id in lc.items()]
-            user_scores = await asyncio.gather(*tasks)
+
+            user_scores = await get_user_scores(session, rules)
 
             author_id = str(ctx.author.id)
             users_leaderboard = sorted(user_scores, reverse=True, key=lambda x: x[2])
@@ -151,6 +169,9 @@ async def ranking(ctx):
 @bot.command()
 async def points(ctx, *character_name):
     """Shows the total points someone achieved, defaults to your linked character."""
+
+    logger.info(f"{ctx.author.name} used !points")
+
     try:
         async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
             await rules.update(session)
@@ -180,6 +201,9 @@ async def points(ctx, *character_name):
 @bot.command()
 async def breakdown(ctx, *character_name):
     """Shows a breakdown of how someone achieved their points, defaults to your linked character."""
+
+    logger.info(f"{ctx.author.name} used !breakdown")
+
     try:
         async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
             await rules.update(session)
@@ -222,6 +246,9 @@ async def breakdown(ctx, *character_name):
 @bot.command()
 async def explain(ctx, zkill_link):
     """Shows the total amount of points for some kill."""
+
+    logger.info(f"{ctx.author.name} used !explain")
+
     try:
         async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
             await rules.update(session)

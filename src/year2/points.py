@@ -1,9 +1,17 @@
 import asyncio
-import json
+import logging
 import math
+import shelve
 from datetime import datetime, timedelta
 
 from utils import get_item_metalevel, get_ship_slots, get_kill
+
+# Configure the logger
+logger = logging.getLogger('discord.points')
+logger.setLevel(logging.WARNING)
+handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
+handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
+logger.addHandler(handler)
 
 kill_cache = {}
 character_cache = {}
@@ -49,6 +57,7 @@ async def get_kill_score(session, kill_id, kill_hash, rules, user_id=None):
         kill_score = 10 * rarity_adjusted_victim_point / (risk_adjusted_pilot_point + sum(standard_points))
 
     except (ZeroDivisionError, ValueError, TypeError):
+        logger.info(f"Could not calculate score for kill {kill_id}")
         kill_score = 0
 
     # Remove Tradehub Kills
@@ -74,8 +83,10 @@ async def get_kill_score(session, kill_id, kill_hash, rules, user_id=None):
     if sum(slots) > 0:
         average_meta_level = sum(meta_levels.values()) / sum(slots)
     elif len(meta_levels) > 0:
+        logger.info(f"Could not determine slots for kill {kill_id}")
         average_meta_level = sum(meta_levels.values()) / len(meta_levels.values())
     else:
+        logger.info(f"Could not calculate meta level for kill {kill_id}")
         average_meta_level = 5  # T2
 
     # Adjust score based on meta level
@@ -101,6 +112,7 @@ async def get_kill_score(session, kill_id, kill_hash, rules, user_id=None):
     if "killmail_time" in kill:
         kill_time = datetime.strptime(kill['killmail_time'], '%Y-%m-%dT%H:%M:%SZ')
     else:
+        logger.warning(f"Could extract time for kill {kill_id}")
         kill_time = datetime.utcnow()
 
     # Figure out time bracket allowed for this kill to be merged
@@ -108,16 +120,17 @@ async def get_kill_score(session, kill_id, kill_hash, rules, user_id=None):
     scaling_time = 60
     attacker_scaling = 1.6
 
-    attacker_points = []
-    for attacker in kill.get("attackers", []):
-        if "character_id" in attacker:
-            attacker_points.append(rules.points(attacker.get("ship_type_id", 0)) ** attacker_scaling)
-
     try:
+        attacker_points = []
+        for attacker in kill.get("attackers", []):
+            if "character_id" in attacker:
+                attacker_points.append(rules.points(attacker.get("ship_type_id", 0)) ** attacker_scaling)
+
         attacker_adjusted_points = sum(attacker_points) ** (1 / attacker_scaling)
         time_bracket = timedelta(
             seconds=base_time + scaling_time * rarity_adjusted_victim_point / attacker_adjusted_points)
     except (ZeroDivisionError, ValueError, TypeError):
+        logger.warning(f"Could not determine time_bracket for kill {kill_id}")
         time_bracket = timedelta(seconds=base_time + scaling_time)
 
     return kill_id, kill_time, kill_score, time_bracket
@@ -127,27 +140,42 @@ async def get_score_groups(session, rules, character_id):
     """
     Fetch all kills of a character for some period from zkill and do point calculation
     """
+
     start = datetime.utcnow() - timedelta(days=90)
     end = datetime.utcnow() - timedelta(days=1)
+
+    logger.info(f"Starting fetch for character {character_id}")
 
     zkill_url = f"https://zkillboard.com/api/kills/characterID/{character_id}/kills/"
 
     usable_kills = {}
     over = False
 
-    page = 1
-    while not over and page < 100:
+    for page in range(1, 100):
+        if over:
+            break
 
         # Fetch kill information from zkillboard
         async with session.get(f"{zkill_url}page/{page}/") as response:
             kills = []
-            for attempt in range(10):
-                try:
-                    kills = await response.json(content_type=None)
-                    page += 1
-                    break
-                except json.decoder.JSONDecodeError:
-                    await asyncio.sleep(0.1)
+            for attempt in range(3):
+                if response.status == 200:
+                    try:
+                        kills = await response.json(content_type=None)
+                    except Exception as e:
+                        logger.error(f"{character_id}, {page}, retry {attempt}, {e}, {await response.text()}")
+                    else:
+                        logger.info(f"Fetched page {page} on attempt {attempt + 1} for character {character_id}")
+                        break
+                elif response.status == 429:
+                    logger.warning(f"To many requests with user {character_id} on page {page}")
+                    raise ValueError(f"Could not fetch data from character {character_id}!")
+
+                await asyncio.sleep(0.5 * (attempt + 2) ** 3)  # Exponential backoff
+
+        # Check if the response is empty. If so we reached the last page and can stop
+        if len(kills) == 0:
+            over = True
 
         # Extract data, which might be differently encoded depending on which zkill url is used
         if type(kills) is dict:
@@ -218,5 +246,31 @@ async def get_total_score(session, rules, character_id):
         scores = [s for s, kills in score_groups]
         total_score = sum(sorted(scores, reverse=True)[:30])
     except ValueError:
+        logger.error(f"Could not determine total score for character {character_id}")
         total_score = 0
     return round(total_score, 2)
+
+
+async def get_user_scores(session, rules):
+    user_scores = []
+    done = []
+    with shelve.open('data/linked_characters', writeback=True) as lc:
+        for attempts in range(5):
+            for author, character_id in lc.items():
+                if character_id not in done:
+                    try:
+                        user_score, _ = await asyncio.gather(get_total_score(session, rules, character_id),
+                                                             asyncio.sleep(1))
+                    except (ValueError, AttributeError):
+                        logger.warning(f"Character {character_id} could not be completed.")
+                    else:
+                        done.append(character_id)
+                        user_scores.append([author, character_id, user_score])
+
+            if len(done) == len(lc):
+                break
+
+        if len(done) != len(lc):
+            logger.error(f"Data for character {character_id} incomplete")
+
+    return user_scores

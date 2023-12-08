@@ -1,10 +1,17 @@
-import asyncio
 import json
+import logging
 import ssl
 
 import aiohttp
 import async_lru
 import certifi
+
+# Configure the logger
+logger = logging.getLogger('discord.utils')
+logger.setLevel(logging.DEBUG)
+handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
+handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
+logger.addHandler(handler)
 
 
 async def lookup(string, return_type):
@@ -57,8 +64,8 @@ async def get_character_name(session, character_id):
 async def get_item_metalevel(session, type_id):
     try:
         for dogma_attribute in \
-        (await repeated_get(session, f"https://esi.evetech.net/latest/universe/types/{type_id}/"))[
-            "dogma_attributes"]:
+                (await repeated_get(session, f"https://esi.evetech.net/latest/universe/types/{type_id}/"))[
+                    "dogma_attributes"]:
             if int(dogma_attribute.get("attribute_id", 0)) in [1692, 633]:
                 return float(dogma_attribute.get("value", 5.0))
     except KeyError:
@@ -95,16 +102,11 @@ async def get_kill(session, kill_id, kill_hash):
 
 async def repeated_get(session, url) -> dict:
     async with session.get(url) as response:
-        for x in range(5):
+        if response.status == 200:
             try:
-                if response.status == 200:
-                    return await response.json(content_type=None)
-            except json.decoder.JSONDecodeError:
-                pass
-
-            await asyncio.sleep(0.2 * (x + 2) ** 3)
-
-        print("All retries failed with URL:", url)
+                return await response.json(content_type=None)
+            except Exception as e:
+                logger.error(f"Error {e} with ESI {response.status}: {await response.text()}")
         raise ValueError(f"Could not fetch data from url {url}!")
 
 
