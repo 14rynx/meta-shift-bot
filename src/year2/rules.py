@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from apiclient import discovery
 from google.oauth2 import service_account
 
-from utils import get_item_name
+from network import get_item_name
 
 
 class RulesConnector:

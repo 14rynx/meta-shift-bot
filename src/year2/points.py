@@ -1,10 +1,9 @@
 import asyncio
 import logging
 import math
-import shelve
 from datetime import datetime, timedelta
 
-from utils import get_item_metalevel, get_ship_slots, get_kill
+from network import get_kill_page, get_item_metalevel, get_ship_slots, get_kill
 
 # Configure the logger
 logger = logging.getLogger('discord.points')
@@ -136,18 +135,8 @@ async def get_kill_score(session, kill_id, kill_hash, rules, user_id=None):
     return kill_id, kill_time, kill_score, time_bracket
 
 
-async def get_score_groups(session, rules, character_id):
-    """
-    Fetch all kills of a character for some period from zkill and do point calculation
-    """
-
-    start = datetime.utcnow() - timedelta(days=90)
-    end = datetime.utcnow() - timedelta(days=1)
-
-    logger.info(f"Starting fetch for character {character_id}")
-
-    zkill_url = f"https://zkillboard.com/api/kills/characterID/{character_id}/kills/"
-
+async def get_usable_kills(session, rules, character_id, start, end):
+    """Fetch a single page of kills from a character"""
     usable_kills = {}
     over = False
 
@@ -155,36 +144,13 @@ async def get_score_groups(session, rules, character_id):
         if over:
             break
 
-        # Fetch kill information from zkillboard
-        async with session.get(f"{zkill_url}page/{page}/") as response:
-            kills = []
-            for attempt in range(3):
-                if response.status == 200:
-                    try:
-                        kills = await response.json(content_type=None)
-                    except Exception as e:
-                        logger.error(f"{character_id}, {page}, retry {attempt}, {e}, {await response.text()}")
-                    else:
-                        logger.info(f"Fetched page {page} on attempt {attempt + 1} for character {character_id}")
-                        break
-                elif response.status == 429:
-                    logger.warning(f"To many requests with user {character_id} on page {page}")
-                    raise ValueError(f"Could not fetch data from character {character_id}!")
-
-                await asyncio.sleep(0.5 * (attempt + 2) ** 3)  # Exponential backoff
+        kills_and_hashes = await get_kill_page(session, character_id, page)
 
         # Check if the response is empty. If so we reached the last page and can stop
-        if len(kills) == 0:
+        if len(kills_and_hashes) == 0:
             over = True
 
-        # Extract data, which might be differently encoded depending on which zkill url is used
-        if type(kills) is dict:
-            kills_and_hashes = kills.items()
-        else:
-            kills_and_hashes = [[kill["killmail_id"], kill["zkb"]["hash"]] for kill in kills]
-
-        # Filter out wired kills that do not actually exist !?
-        kills_and_hashes = [(k, h) for k, h in kills_and_hashes if h != "CCP VERIFIED"]
+        await asyncio.sleep(1 - len(kills_and_hashes) / 50)  # Sleep on smaller pages to not trigger 429 or zkill
 
         # Update per character cache and get kills from it if there are any
         if character_id in character_cache:
@@ -192,7 +158,7 @@ async def get_score_groups(session, rules, character_id):
         else:
             character_cache[character_id] = kills_and_hashes
 
-        # If our page connects to the cache, pull the entire cache, most likely ending the loop
+        # If our page connects to the cache, pull the entire cache, which might end the fetch
         if set(kills_and_hashes) & set(character_cache[character_id]):
             kills_and_hashes = character_cache[character_id]
 
@@ -217,6 +183,19 @@ async def get_score_groups(session, rules, character_id):
                 usable_kills[kill_id] = (kill_time, kill_score, time_bracket)
             elif kill_time < start:
                 over = True
+    return usable_kills
+
+
+async def get_collated_kills(session, rules, character_id):
+    """
+    Fetch all kills of a character for some period from zkill and do point calculation
+    """
+
+    start = datetime.utcnow() - timedelta(days=90)
+    end = datetime.utcnow() - timedelta(days=1)
+
+    logger.info(f"Starting fetch for character {character_id}")
+    usable_kills = await get_usable_kills(session, rules, character_id, start, end)
 
     # Collate kills based on their time bracket
     groups = {}
@@ -241,7 +220,7 @@ async def get_total_score(session, rules, character_id):
     """
     Sum up all the scores according to the competition rules
     """
-    score_groups = await get_score_groups(session, rules, character_id)
+    score_groups = await get_collated_kills(session, rules, character_id)
     try:
         scores = [s for s, kills in score_groups]
         total_score = sum(sorted(scores, reverse=True)[:30])
@@ -249,28 +228,3 @@ async def get_total_score(session, rules, character_id):
         logger.error(f"Could not determine total score for character {character_id}")
         total_score = 0
     return round(total_score, 2)
-
-
-async def get_user_scores(session, rules):
-    user_scores = []
-    done = []
-    with shelve.open('data/linked_characters', writeback=True) as lc:
-        for attempts in range(5):
-            for author, character_id in lc.items():
-                if character_id not in done:
-                    try:
-                        user_score, _ = await asyncio.gather(get_total_score(session, rules, character_id),
-                                                             asyncio.sleep(1))
-                    except (ValueError, AttributeError):
-                        logger.warning(f"Character {character_id} could not be completed.")
-                    else:
-                        done.append(character_id)
-                        user_scores.append([author, character_id, user_score])
-
-            if len(done) == len(lc):
-                break
-
-        if len(done) != len(lc):
-            logger.error(f"Data for character {character_id} incomplete")
-
-    return user_scores

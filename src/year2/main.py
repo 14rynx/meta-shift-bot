@@ -10,9 +10,10 @@ import certifi
 import discord
 from discord.ext import commands
 
-from points import get_total_score, get_score_groups, get_kill_score, get_user_scores
+from network import lookup, get_hash, get_character_name
+from points import get_total_score, get_collated_kills, get_kill_score
 from rules import RulesConnector
-from utils import lookup, get_hash, send_large_message, get_character_name
+from utils import send_large_message
 
 # Configure the logger
 logger = logging.getLogger('discord.main')
@@ -94,14 +95,35 @@ async def unlink(ctx):
         await ctx.send(f"Unlinked your character.")
 
 
+async def get_user_scores(session, rules):
+    users_done = [0]
+    user_scores = []
+    with shelve.open('data/linked_characters', writeback=True) as lc:
+        while len(users_done) < len(lc.items()):
+
+            for author, character_id in lc.items():
+                if character_id not in users_done:
+                    try:
+                        user_score, _ = await asyncio.gather(get_total_score(session, rules, character_id),
+                                                             asyncio.sleep(1))
+                        logger.info(f"Character {character_id} was completed.")
+                    except (ValueError, AttributeError):
+                        logger.warning(f"Character {character_id} could not be completed.")
+                        await asyncio.sleep(1)  # Make sure zkill rate limit is not hit because of the error
+                    else:
+                        users_done.append(character_id)
+                        user_scores.append([author, character_id, user_score])
+
+            logger.info(f"Completion {len(users_done)} {len(lc.items())}")
+            await asyncio.sleep(1)
+    return user_scores
+
+
 @bot.command()
 async def leaderboard(ctx, top=None):
     """Shows the current people with the most points."""
 
     logger.info(f"{ctx.author.name} used !leaderboard")
-
-    with shelve.open('data/linked_characters', writeback=True) as lc:
-        await ctx.send(f"Fetching leaderboard, this will take approximately {len(lc.items())} seconds.")
 
     if top is None:
         top = 10
@@ -223,7 +245,7 @@ async def breakdown(ctx, *character_name):
                     return
 
             point_strings = []
-            groups = await get_score_groups(session, rules, character_id)
+            groups = await get_collated_kills(session, rules, character_id)
             for total_score, kills in sorted(groups, reverse=True)[0:30]:
                 if len(kills) == 1:
                     point_string = f"[**{total_score:.1f}**](<https://zkillboard.com/kill/{kills[0][0]}/>)"
