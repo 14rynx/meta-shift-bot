@@ -100,16 +100,18 @@ async def unlink(ctx):
         await ctx.send(f"Unlinked your character.")
 
 
-async def get_user_scores(session, rules):
+async def get_user_scores(session, rules, ctx):
     global score_cache
     global score_cache_last_updated
 
     if score_cache_last_updated is None or score_cache_last_updated < datetime.utcnow() - timedelta(hours=1):
-        users_done = [0]
+        users_done = []
         user_scores = []
         with shelve.open('data/linked_characters', writeback=True) as lc:
-            while len(users_done) < len(lc.items()):
+            amount = len(lc.items()) - 1
+            await ctx.send(f"Refetching ranking, this will take approximately {amount} seconds.")
 
+            while len(users_done) < amount:
                 for author, character_id in lc.items():
                     if character_id not in users_done:
                         try:
@@ -144,7 +146,7 @@ async def leaderboard(ctx, top=None):
         async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
             await rules.update(session)
 
-            user_scores = await get_user_scores(session, rules)
+            user_scores = await get_user_scores(session, rules, ctx)
 
             output = "# Leaderboard\n"
             count = 1
@@ -168,14 +170,11 @@ async def ranking(ctx):
 
     logger.info(f"{ctx.author.name} used !ranking")
 
-    with shelve.open('data/linked_characters', writeback=True) as lc:
-        await ctx.send(f"Fetching ranking, this will take approximately {len(lc.items())} seconds.")
-
     try:
         async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
             await rules.update(session)
 
-            user_scores = await get_user_scores(session, rules)
+            user_scores = await get_user_scores(session, rules, ctx)
 
             author_id = str(ctx.author.id)
             users_leaderboard = sorted(user_scores, reverse=True, key=lambda x: x[2])
