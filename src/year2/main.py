@@ -4,6 +4,7 @@ import logging
 import os
 import shelve
 import ssl
+from datetime import datetime, timedelta
 
 import aiohttp
 import certifi
@@ -33,6 +34,10 @@ rules = RulesConnector(1)
 
 # Adding ssl context because aiohttp doesn't come with certificates
 ssl_context = ssl.create_default_context(cafile=certifi.where())
+
+# Initialize high level cache
+score_cache = []
+score_cache_last_updated = None
 
 
 @bot.command()
@@ -96,27 +101,34 @@ async def unlink(ctx):
 
 
 async def get_user_scores(session, rules):
-    users_done = [0]
-    user_scores = []
-    with shelve.open('data/linked_characters', writeback=True) as lc:
-        while len(users_done) < len(lc.items()):
+    global score_cache
+    global score_cache_last_updated
 
-            for author, character_id in lc.items():
-                if character_id not in users_done:
-                    try:
-                        user_score, _ = await asyncio.gather(get_total_score(session, rules, character_id),
-                                                             asyncio.sleep(1))
-                        logger.info(f"Character {character_id} was completed.")
-                    except (ValueError, AttributeError):
-                        logger.warning(f"Character {character_id} could not be completed.")
-                        await asyncio.sleep(1)  # Make sure zkill rate limit is not hit because of the error
-                    else:
-                        users_done.append(character_id)
-                        user_scores.append([author, character_id, user_score])
+    if score_cache_last_updated is None or score_cache_last_updated < datetime.utcnow() - timedelta(hours=1):
+        users_done = [0]
+        user_scores = []
+        with shelve.open('data/linked_characters', writeback=True) as lc:
+            while len(users_done) < len(lc.items()):
 
-            logger.info(f"Completion {len(users_done)} {len(lc.items())}")
-            await asyncio.sleep(1)
-    return user_scores
+                for author, character_id in lc.items():
+                    if character_id not in users_done:
+                        try:
+                            user_score, _ = await asyncio.gather(get_total_score(session, rules, character_id),
+                                                                 asyncio.sleep(1))
+                            logger.info(f"Character {character_id} was completed.")
+                        except (ValueError, AttributeError):
+                            logger.warning(f"Character {character_id} could not be completed.")
+                            await asyncio.sleep(1)  # Make sure zkill rate limit is not hit because of the error
+                        else:
+                            users_done.append(character_id)
+                            user_scores.append([author, character_id, user_score])
+
+                logger.info(f"Completion {len(users_done)} {len(lc.items())}")
+                await asyncio.sleep(1)
+
+        score_cache = user_scores
+        score_cache_last_updated = datetime.utcnow()
+    return score_cache
 
 
 @bot.command()
