@@ -191,8 +191,8 @@ async def get_collated_kills(session, rules, character_id):
     Fetch all kills of a character for some period from zkill and do point calculation
     """
 
-    start = datetime.utcnow() - timedelta(days=90)
-    end = datetime.utcnow() - timedelta(days=1)
+    start = datetime(2023, 12, 13)
+    end = datetime(2023, 12, 20)
 
     logger.info(f"Starting fetch for character {character_id}")
     usable_kills = await get_usable_kills(session, rules, character_id, start, end)
