@@ -121,6 +121,9 @@ async def get_user_scores(session, rules, ctx):
                         except (ValueError, AttributeError):
                             logger.warning(f"Character {character_id} could not be completed.")
                             await asyncio.sleep(1)  # Make sure zkill rate limit is not hit because of the error
+                        except aiohttp.http_exceptions.BadHttpMessage:
+                            amount -= 1
+                            logger.error(f"Character {character_id} will not be completed ever.")
                         else:
                             users_done.append(character_id)
                             user_scores.append([author, character_id, user_score])

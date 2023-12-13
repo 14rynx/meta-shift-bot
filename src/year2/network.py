@@ -115,7 +115,9 @@ async def get(session, url) -> dict:
 
 @async_lru.alru_cache(maxsize=4000, ttl=3600)
 async def get_kill_page(session, character_id, page):
-    url = f"https://zkillboard.com/api/kills/characterID/{character_id}/kills/page/{page}/"
+    url = f"https://zkillboard.com/api/kills/characterID/{character_id}/kills/"
+    if page > 1:
+        url += f"page/{page}/"
 
     async with session.get(url) as response:
         kills = []
