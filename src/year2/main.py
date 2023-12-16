@@ -139,9 +139,9 @@ async def get_user_scores(session, rules, ctx):
                 logger.info(f"Completion {len(users_done)} {len(lc.items())}")
                 await asyncio.sleep(1)
 
-        score_cache = user_scores
-        score_cache_last_updated = datetime.utcnow()
-        score_cache_size = amount
+            score_cache = user_scores
+            score_cache_last_updated = datetime.utcnow()
+            score_cache_size = amount
     return score_cache
 
 
