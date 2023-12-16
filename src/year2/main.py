@@ -38,6 +38,7 @@ ssl_context = ssl.create_default_context(cafile=certifi.where())
 # Initialize high level cache
 score_cache = []
 score_cache_last_updated = None
+score_cache_size = None
 
 
 @bot.command()
@@ -103,12 +104,19 @@ async def unlink(ctx):
 async def get_user_scores(session, rules, ctx):
     global score_cache
     global score_cache_last_updated
+    global score_cache_size
 
-    if score_cache_last_updated is None or score_cache_last_updated < datetime.utcnow() - timedelta(hours=1):
-        users_done = []
-        user_scores = []
-        with shelve.open('data/linked_characters', writeback=True) as lc:
-            amount = len(lc.items()) - 1
+    # Find out how many users are registered
+    with shelve.open('data/linked_characters', writeback=True) as lc:
+        amount = len(lc.items()) - 1
+
+        # Update cache if new users have been added, cache is more than 1h old or has never been fetched
+        if (score_cache_last_updated is None
+                or score_cache_last_updated < datetime.utcnow() - timedelta(hours=1)
+                or score_cache_size < amount):
+
+            users_done = []
+            user_scores = []
             await ctx.send(f"Refetching ranking, this will take approximately {amount} seconds.")
 
             while len(users_done) < amount:
@@ -117,7 +125,7 @@ async def get_user_scores(session, rules, ctx):
                         try:
                             user_score, _ = await asyncio.gather(get_total_score(session, rules, character_id),
                                                                  asyncio.sleep(1))
-                            logger.info(f"Character {character_id} was completed.")
+                            logger.debug(f"Character {character_id} was completed.")
                         except (ValueError, AttributeError):
                             logger.warning(f"Character {character_id} could not be completed.")
                             await asyncio.sleep(1)  # Make sure zkill rate limit is not hit because of the error
@@ -133,6 +141,7 @@ async def get_user_scores(session, rules, ctx):
 
         score_cache = user_scores
         score_cache_last_updated = datetime.utcnow()
+        score_cache_size = amount
     return score_cache
 
 
