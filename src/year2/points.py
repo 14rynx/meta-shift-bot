@@ -68,7 +68,7 @@ async def get_kill_score(session, kill_id, kill_hash, rules, user_id=None):
         kill_score = 0
 
     # Remove Tradehub Kills
-    if kill.get("solar_system_id", 0) in [30000142, 30002187, 30002510, 30002053, 30002659]:
+    if kill.get("solar_system_id", 0) in [30000142, 30002187, 30002510, 30002053, 30002659, 30002768]:
         kill_score = 0
 
     # Figure out the metalevel of items
