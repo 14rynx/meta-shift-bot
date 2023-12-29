@@ -38,6 +38,10 @@ async def get_kill_score(session, kill_id, kill_hash, rules, user_id=None):
                 else:
                     standard_points.append(rules.points(attacker.get("ship_type_id", 0)))
 
+            # Highsec losses to concord don't give any points
+            elif attacker.get("ship_type_id", 0) == 3885:
+                rarity_adjusted_victim_point = 0
+
     # If we don't have a clear protagonist, we have to assign one
     # First we collect all the points without protagonist, and use the risk adjusted point
     # To collect the difference (negative) if a guy were the protagonist
@@ -50,6 +54,10 @@ async def get_kill_score(session, kill_id, kill_hash, rules, user_id=None):
                 standard_points.append(standard_point)
                 if risk_point and standard_point:
                     risk_adjusted_pilot_point = min(risk_adjusted_pilot_point, risk_point - standard_point)
+
+            # Highsec losses to concord don't give any points
+            elif attacker.get("ship_type_id", 0) == 3885:
+                rarity_adjusted_victim_point = 0
 
     # Combine points into preliminary score
     try:
@@ -191,8 +199,8 @@ async def get_collated_kills(session, rules, character_id):
     Fetch all kills of a character for some period from zkill and do point calculation
     """
 
-    start = datetime(2023, 12, 13)
-    end = datetime(2023, 12, 20)
+    start = datetime(2024, 1, 1)
+    end = datetime(2024, 4, 1)
 
     logger.info(f"Starting fetch for character {character_id}")
     usable_kills = await get_usable_kills(session, rules, character_id, start, end)
