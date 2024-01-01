@@ -60,7 +60,7 @@ async def link(ctx, *character_name):
                 relinks[author_id] = 5
                 author_relinks = 5
             else:
-                if author_id not in ["183094368037502976", "242164531151765505"]:
+                if author_id not in os.environ["PRIVILEGED_USERS"].split(" "):
                     author_relinks = relinks[author_id] - 1
                     if author_relinks > 0:
                         relinks[author_id] = author_relinks
@@ -136,7 +136,7 @@ async def get_user_scores(session, rules, ctx):
                             users_done.append(character_id)
                             user_scores.append([author, character_id, user_score])
 
-                logger.info(f"Completion {len(users_done)} {len(lc.items())}")
+                logger.info(f"Completion {len(users_done)}/{len(lc.items())}")
                 await asyncio.sleep(1)
 
             score_cache = user_scores
@@ -151,24 +151,25 @@ async def leaderboard(ctx, top=None):
 
     logger.info(f"{ctx.author.name} used !leaderboard")
 
-    if top is None:
-        top = 10
-
     try:
         async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
             await rules.update(session)
 
             user_scores = await get_user_scores(session, rules, ctx)
 
+            if top is None:
+                top = 10
+            elif top == "all" and str(ctx.author.id) in os.environ["PRIVILEGED_USERS"].split(" "):
+                top = len(user_scores)
+
             output = "# Leaderboard\n"
-            count = 1
+            for count, (aid, cid, score) in enumerate(sorted(user_scores, reverse=True, key=lambda x: x[2])[:top]):
+                output += (
+                    f"{count + 1}: <@{aid}> [{await get_character_name(session, cid)}]"
+                    f"(<https://zkillboard.com/character/{cid}/>) with {score:.1f} points\n"
+                )
 
-            for aid, cid, score in sorted(user_scores, reverse=True, key=lambda x: x[2])[:top]:
-                output += (f"{count}: <@{aid}> [{await get_character_name(session, cid)}](<https://zkillboard.com/"
-                           f"character/{cid}/>) with {score:.1f} points\n")
-                count += 1
-
-            await ctx.send(output, allowed_mentions=discord.AllowedMentions(users=False))
+            await send_large_message(ctx, output, delimiter="\n", allowed_mentions=discord.AllowedMentions(users=False))
 
     except ValueError:
         await ctx.send("Could not get all required responses from ESI / Zkill!")
