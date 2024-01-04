@@ -20,6 +20,7 @@ async def get_kill_score(session, kill_id, kill_hash, rules, user_id=None):
     """Fetch a single kill from ESI and calculate it's score according to the competition rules"""
     kill = await get_kill(session, kill_id, kill_hash)
 
+    # ATTACKERS / VICTIM CALCULATION
     # Calculate points of each category
     rarity_adjusted_victim_point = rules.rarity_adjusted_points(kill.get("victim", {}).get("ship_type_id", 0))
 
@@ -38,10 +39,6 @@ async def get_kill_score(session, kill_id, kill_hash, rules, user_id=None):
                 else:
                     standard_points.append(rules.points(attacker.get("ship_type_id", 0)))
 
-            # Highsec losses to concord don't give any points
-            elif attacker.get("ship_type_id", 0) == 3885:
-                rarity_adjusted_victim_point = 0
-
     # If we don't have a clear protagonist, we have to assign one
     # First we collect all the points without protagonist, and use the risk adjusted point
     # To collect the difference (negative) if a guy were the protagonist
@@ -55,22 +52,26 @@ async def get_kill_score(session, kill_id, kill_hash, rules, user_id=None):
                 if risk_point and standard_point:
                     risk_adjusted_pilot_point = min(risk_adjusted_pilot_point, risk_point - standard_point)
 
-            # Highsec losses to concord don't give any points
-            elif attacker.get("ship_type_id", 0) == 3885:
-                rarity_adjusted_victim_point = 0
-
     # Combine points into preliminary score
     try:
         kill_score = 10 * rarity_adjusted_victim_point / (risk_adjusted_pilot_point + sum(standard_points))
-
     except (ZeroDivisionError, ValueError, TypeError):
         logger.info(f"Could not calculate score for kill {kill_id}")
         kill_score = 0
 
-    # Remove Tradehub Kills
+    # EXCEPTIONS
+    # Deal with all the kills that should awward no points
+    # Remove kills in Tradehub systems
     if kill.get("solar_system_id", 0) in [30000142, 30002187, 30002510, 30002053, 30002659, 30002768]:
         kill_score = 0
 
+    # Remove kills where CONCORD had something to do with it
+    for attacker in kill.get("attackers", []):
+        if attacker.get("ship_type_id", 0) == 3885:
+            kill_score = 0
+
+    # FIT INFLUENCE
+    # Now adjust the score based on the meta levels / filled slots of the victim
     # Figure out the metalevel of items
     # Go through each slot, and find the module with the highest meta level in it to filter out ammo with meta level
     meta_levels = {}
@@ -86,7 +87,6 @@ async def get_kill_score(session, kill_id, kill_hash, rules, user_id=None):
 
     # Average the meta level in the best available way
     slots = (await get_ship_slots(session, kill["victim"]["ship_type_id"]))
-
     if sum(slots) > 0:
         average_meta_level = sum(meta_levels.values()) / sum(slots)
     elif len(meta_levels) > 0:
@@ -97,35 +97,27 @@ async def get_kill_score(session, kill_id, kill_hash, rules, user_id=None):
         average_meta_level = 5  # T2
 
     # Adjust score based on meta level
-    # Parameters
-    neutral_input = 5
-    neutral_output = 1
-    expo = 0.8
-    scaling = 0.5
+    # Meta-parameters:
+    neutral_input = 5  # Meta level that results in no change
+    neutral_output = 1  # What no change means
+    expo = 0.8  # How strongly meta level is exponential (bigger number -> smaller output changes around neutral)
+    scaling = 0.5  # How much of the total score can be deducted at most
 
     # Linearly scale meta level into the range -1 ... something, with 0 for neutral element
     linear = (average_meta_level - neutral_input) / neutral_input
-
     # Apply exponentiation so that values of -1 and 1 stay the same, then scale the output
     exponential = linear * math.exp(abs(linear * expo)) * (scaling / math.exp(expo))
-
     # Move neutral element to desired output
     factor = exponential + neutral_output
-
     # Apply factor to score
     kill_score *= factor
 
-    # Find time of killmail for cache
-    if "killmail_time" in kill:
-        kill_time = datetime.strptime(kill['killmail_time'], '%Y-%m-%dT%H:%M:%SZ')
-    else:
-        logger.warning(f"Could extract time for kill {kill_id}")
-        kill_time = datetime.utcnow()
-
-    # Figure out time bracket allowed for this kill to be merged
-    base_time = 30
-    scaling_time = 60
-    attacker_scaling = 1.6
+    # STAPLING TIME
+    # Figure out time bracket allowed for this kill to be stapled with other kills
+    # Meta-parameters:
+    base_time = 30  # Time each kills always gives
+    scaling_time = 60  # Time that changes based on sizes of killer / attackers
+    attacker_scaling = 1.6  # How much having more people on a kill results in less time awwarded
 
     try:
         attacker_points = []
@@ -140,11 +132,14 @@ async def get_kill_score(session, kill_id, kill_hash, rules, user_id=None):
         logger.warning(f"Could not determine time_bracket for kill {kill_id}")
         time_bracket = timedelta(seconds=base_time + scaling_time)
 
+    # Find time of killmail for cache
+    kill_time = datetime.strptime(kill['killmail_time'], '%Y-%m-%dT%H:%M:%SZ')
+
     return kill_id, kill_time, kill_score, time_bracket
 
 
 async def get_usable_kills(session, rules, character_id, start, end):
-    """Fetch a single page of kills from a character"""
+    """Fetch all kills for a character in a given time frame"""
     usable_kills = {}
     over = False
 
@@ -205,7 +200,7 @@ async def get_collated_kills(session, rules, character_id):
     logger.info(f"Starting fetch for character {character_id}")
     usable_kills = await get_usable_kills(session, rules, character_id, start, end)
 
-    # Collate kills based on their time bracket
+    # Group kills based on their time bracket
     groups = {}
     last_time = None
     last_id = None
@@ -219,8 +214,20 @@ async def get_collated_kills(session, rules, character_id):
                 last_time = [kill_time]
                 groups[last_id] = [(kill_id, kill_score)]
 
-    # Now rearrange scores with total_score: kills
-    score_groups = [(sum([s for i, s in kills]), kills) for last_id, kills in groups.items()]
+    # Now figure out the scores of the stapled kills.
+    # Meta-parameter
+    max_multiplier = 2  # How much more a kill can be worth if you kill multiple
+
+    score_groups = []
+    for last_id, kills in groups.items():
+        stapled_score = 0
+        for i, (kill_id, kill_score) in enumerate(kills):
+            # Geometric sum style formula e.g. for 2 results in 1, 1.5, 1.75, 1.875 ... 2 - e
+            multiplier = max_multiplier - max_multiplier ** -i
+            logger.info(f"Multiplier {multiplier}")
+            stapled_score += kill_score * multiplier
+        score_groups.append((stapled_score, kills))
+
     return score_groups
 
 

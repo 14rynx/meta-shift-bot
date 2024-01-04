@@ -276,11 +276,13 @@ async def breakdown(ctx, *character_name):
                 else:
                     point_string = f"**{total_score:.1f}** ("
                     links = [f"[{s:.1f}](<https://zkillboard.com/kill/{i}/>)" for i, s in kills]
-                    point_string += " + ".join(links)
+                    point_string += ", ".join(links)
                     point_string += ")"
                 point_strings.append(point_string)
             output += ", ".join(point_strings)
 
+            if len(point_strings) == 0:
+                output += "No points for this character so far."
             await send_large_message(ctx, output, delimiter=",", allowed_mentions=discord.AllowedMentions(users=False))
 
     except ValueError:
