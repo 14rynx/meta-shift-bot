@@ -314,11 +314,12 @@ async def explain(ctx, zkill_link, *character_name):
                 kill_id, kill_time, kill_score, time_bracket = await get_kill_score(session, kill_id, kill_hash, rules,
                                                                                     user_id=character_id)
                 await ctx.channel.send(f"This [kill](https://zkillboard.com/kill/{kill_id}/) is worth {kill_score:.1f} "
-                                       f"with the given character.")
+                                       f"with the given character, and will chain for {time_bracket.total_seconds():.1f} seconds.")
             else:
                 kill_id, kill_time, kill_score, time_bracket = await get_kill_score(session, kill_id, kill_hash, rules)
                 await ctx.channel.send(f"This [kill](https://zkillboard.com/kill/{kill_id}/) is worth {kill_score:.1f} "
-                                       f"points\nwhen using the largest ship as the ship of the contestant.")
+                                       f"points when using the largest ship as the ship of the contestant, "
+                                       f"and will chain for {time_bracket.total_seconds():.1f} seconds.")
 
     except ValueError:
         await ctx.channel.send("Could not get all required responses from ESI / Zkill!")
