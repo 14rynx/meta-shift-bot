@@ -115,7 +115,7 @@ async def get_kill_score(session, kill_id, kill_hash, rules, user_id=None):
     # STAPLING TIME
     # Figure out time bracket allowed for this kill to be stapled with other kills
     # Meta-parameters:
-    base_time = 30  # Time each kills always gives
+    base_time = 60  # Time each kills always gives
     scaling_time = 60  # Time that changes based on sizes of killer / attackers
     attacker_scaling = 1.6  # How much having more people on a kill results in less time awwarded
 
