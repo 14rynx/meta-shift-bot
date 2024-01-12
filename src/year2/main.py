@@ -49,42 +49,46 @@ async def get_user_scores(session, rules, ctx):
     global score_cache_size
 
     # Find out how many users are registered
-    with shelve.open('data/linked_characters', writeback=True) as lc:
+    try:
+        with shelve.open('data/linked_characters', writeback=True) as lc:
+            user_data = dict(lc.items())
+    except _gdbm.error:
+        await ctx.send("Currently busy with another command!")
 
-        # Update cache if new users have been added, cache is more than 1h old or has never been fetched
-        if (
-                score_cache_last_updated is None
-                or score_cache_last_updated < datetime.utcnow() - timedelta(hours=1)
-                or score_cache_size < len(lc.items())
-        ):
+    # Update cache if new users have been added, cache is more than 1h old or has never been fetched
+    if (
+            score_cache_last_updated is None
+            or score_cache_last_updated < datetime.utcnow() - timedelta(hours=1)
+            or score_cache_size < len(user_data)
+    ):
 
-            users_done = []
-            user_scores = []
-            await ctx.send(f"Refetching ranking, this will take approximately {len(lc.items()) - 1} seconds.")
+        users_done = []
+        user_scores = []
+        await ctx.send(f"Refetching ranking, this will take approximately {len(user_data)} seconds.")
 
-            while len(users_done) < len(lc.items()) - 1:
-                for author, character_id in lc.items():
-                    if character_id not in users_done:
-                        try:
-                            score_groups, _ = await asyncio.gather(get_collated_kills(session, rules, character_id),
-                                                                   asyncio.sleep(1))
-                            user_score = get_total_score(score_groups)
-                        except (ValueError, AttributeError):
-                            await asyncio.sleep(1)  # Make sure zkill rate limit is not hit because of the error
-                        except aiohttp.http_exceptions.BadHttpMessage as error_instance:
-                            logger.error(f"Character {character_id} will not be completed ever!")
-                            raise error_instance
-                        else:
-                            logger.debug(f"Character {character_id} was completed.")
-                            users_done.append(character_id)
-                            user_scores.append([author, character_id, user_score])
+        while len(users_done) < len(user_data) - 1:
+            for author, character_id in user_data.items():
+                if character_id not in users_done:
+                    try:
+                        score_groups, _ = await asyncio.gather(get_collated_kills(session, rules, character_id),
+                                                               asyncio.sleep(1))
+                        user_score = get_total_score(score_groups)
+                    except (ValueError, AttributeError):
+                        await asyncio.sleep(1)  # Make sure zkill rate limit is not hit because of the error
+                    except aiohttp.http_exceptions.BadHttpMessage as error_instance:
+                        logger.error(f"Character {character_id} will not be completed ever!")
+                        raise error_instance
+                    else:
+                        logger.debug(f"Character {character_id} was completed.")
+                        users_done.append(character_id)
+                        user_scores.append([author, character_id, user_score])
 
-                logger.info(f"Completion {len(users_done)}/{len(lc.items()) - 1}")
-                await asyncio.sleep(1)
+            logger.info(f"Completion {len(users_done)}/{len(user_data)}")
+            await asyncio.sleep(1)
 
-            score_cache = user_scores
-            score_cache_last_updated = datetime.utcnow()
-            score_cache_size = len(lc.items()) - 1
+        score_cache = user_scores
+        score_cache_last_updated = datetime.utcnow()
+        score_cache_size = len(user_data) - 1
     return score_cache
 
 
@@ -265,7 +269,7 @@ async def points(ctx, *character_name):
         async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
             await rules.update(session)
             score_groups = await get_collated_kills(session, rules, character_id)
-            await ctx.send(f"{predicate} {await get_total_score(score_groups)} points")
+            await ctx.send(f"{predicate} {get_total_score(score_groups)} points")
 
     except ValueError as instance:
         await ctx.send(str(instance))
