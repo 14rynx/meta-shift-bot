@@ -127,7 +127,6 @@ async def get_user_scores(session, rules, ctx):
                                                                  asyncio.sleep(1))
                             logger.debug(f"Character {character_id} was completed.")
                         except (ValueError, AttributeError):
-                            logger.warning(f"Character {character_id} could not be completed.")
                             await asyncio.sleep(1)  # Make sure zkill rate limit is not hit because of the error
                         except aiohttp.http_exceptions.BadHttpMessage:
                             amount -= 1
@@ -171,10 +170,8 @@ async def leaderboard(ctx, top=None):
 
             await send_large_message(ctx, output, delimiter="\n", allowed_mentions=discord.AllowedMentions(users=False))
 
-    except ValueError:
-        await ctx.send("Could not get all required responses from ESI / Zkill!")
-    except _gdbm.error:
-        await ctx.send("Currently busy with another command!")
+    except ValueError as instance:
+        await ctx.send(str(instance))
 
 
 @bot.command()
@@ -187,16 +184,17 @@ async def ranking(ctx):
         async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
             await rules.update(session)
 
+            # Get data
             user_scores = await get_user_scores(session, rules, ctx)
-
-            author_id = str(ctx.author.id)
             users_leaderboard = sorted(user_scores, reverse=True, key=lambda x: x[2])
-
             author_ids = [aid for aid, _, _ in users_leaderboard]
 
-            middle = author_ids.index(author_id)
+            # Calculate which entries to show
+            middle = author_ids.index(str(ctx.author.id))
             first = max(middle - 2, 0)
             last = min(middle + 3, len(users_leaderboard))
+
+            # Build output
             output = "# Leaderboard\n (around your position)\n"
             count = first + 1
             for aid, cid, score in sorted(user_scores, reverse=True, key=lambda x: x[2])[first:last]:
@@ -206,10 +204,30 @@ async def ranking(ctx):
 
             await ctx.send(output, allowed_mentions=discord.AllowedMentions(users=False))
 
-    except ValueError:
-        await ctx.send("Could not get all required responses from ESI / Zkill!")
-    except _gdbm.error:
-        await ctx.send("Currently busy with another command!")
+    except ValueError as instance:
+        await ctx.send(str(instance))
+
+
+async def parse_character(author_id: str, character_name_array: tuple):
+    """Given a discord id and an input character, find a suitable character id and possesive form"""
+    if len(character_name_array) > 0:
+        character_name = " ".join(character_name_array)
+        character_id = await lookup(character_name, 'characters')
+        possesive = f"[{character_name}](https://zkillboard.com/character/{character_id}/) currently has"
+    else:
+        if author_id is not None:
+            try:
+                with shelve.open('data/linked_characters', writeback=True) as linked_characters:
+                    character_id = linked_characters[author_id]
+                possesive = "You currently have"
+            except KeyError:
+                raise ValueError("You do not have any linked character!")
+            except _gdbm.error:
+                raise ValueError("Currently busy with another command!")
+        else:
+            return None, None
+
+    return character_id, possesive
 
 
 @bot.command()
@@ -221,27 +239,11 @@ async def points(ctx, *character_name):
     try:
         async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
             await rules.update(session)
-            if character_name:
-                character_name = " ".join(character_name)
-                character_id = await lookup(character_name, 'characters')
-                output = (f"[{character_name}](https://zkillboard.com/character/{character_id}/) "
-                          f"currently has {await get_total_score(session, rules, character_id)} points")
-            else:
-                author_id = str(ctx.author.id)
-                try:
-                    with shelve.open('data/linked_characters', writeback=True) as linked_characters:
-                        character_id = linked_characters[author_id]
-                except KeyError:
-                    await ctx.send(f"You do not have any linked character!")
-                    return
+            character_id, predicate = await parse_character(str(ctx.author.id), character_name)
+            await ctx.send(f"{predicate} {await get_total_score(session, rules, character_id)} points")
 
-                output = f"You currently have {await get_total_score(session, rules, character_id)} points"
-            await ctx.send(output)
-
-    except ValueError:
-        await ctx.send("Could not get all required responses from ESI / Zkill!")
-    except _gdbm.error:
-        await ctx.send("Currently busy with another command!")
+    except ValueError as instance:
+        await ctx.send(str(instance))
 
 
 @bot.command()
@@ -253,20 +255,8 @@ async def breakdown(ctx, *character_name):
     try:
         async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
             await rules.update(session)
-            if character_name:
-                character_name = " ".join(character_name)
-                character_id = await lookup(character_name, 'characters')
-                output = (f"[{character_name}](https://zkillboard.com/character/{character_id}/)"
-                          f"'s points distribution:\n")
-            else:
-                author_id = str(ctx.author.id)
-                output = f"<@{author_id}>'s points distribution:\n"
-                try:
-                    with shelve.open('data/linked_characters', writeback=True) as linked_characters:
-                        character_id = linked_characters[author_id]
-                except KeyError:
-                    await ctx.send(f"You do not have any linked character!")
-                    return
+            character_id, predicate = await parse_character(str(ctx.author.id), character_name)
+            output = f"{predicate} the point distribution:\n"
 
             point_strings = []
             groups = await get_collated_kills(session, rules, character_id)
@@ -282,13 +272,21 @@ async def breakdown(ctx, *character_name):
             output += ", ".join(point_strings)
 
             if len(point_strings) == 0:
-                output += "No points for this character so far."
+                output += "- no points for this character so far."
             await send_large_message(ctx, output, delimiter=",", allowed_mentions=discord.AllowedMentions(users=False))
 
-    except ValueError:
-        await ctx.send("Could not get all required responses from ESI / Zkill!")
-    except _gdbm.error:
-        await ctx.send("Currently busy with another command!")
+    except ValueError as instance:
+        await ctx.send(str(instance))
+
+
+def parse_kill_id(zkill_link: str) -> int:
+    # TODO: Add more variants of parsing a link.
+    try:
+        kill_id = int(zkill_link.split("/")[-2])
+    except IndexError:
+        raise ValueError(f"Invalid zkill_link: {zkill_link}")
+
+    return kill_id
 
 
 @bot.command()
@@ -300,46 +298,21 @@ async def explain(ctx, zkill_link, *character_name):
     try:
         async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
             await rules.update(session)
-
-            try:
-                kill_id = int(zkill_link.split("/")[-2])
-            except IndexError:
-                await ctx.send("Could not parse that link!")
-                return
-
+            kill_id = parse_kill_id(zkill_link)
             kill_hash = await get_hash(session, kill_id)
-            if character_name:
-                character_name = " ".join(character_name)
-                character_id = await lookup(character_name, 'characters')
-                kill_id, kill_time, kill_score, time_bracket = await get_kill_score(session, kill_id, kill_hash, rules,
-                                                                                    user_id=character_id)
+            character_id, _ = await parse_character(None, character_name)
+            kill_id, kill_time, kill_score, time_bracket = await get_kill_score(session, kill_id, kill_hash, rules,
+                                                                                main_character_id=character_id)
+            if character_id is not None:
                 await ctx.channel.send(f"This [kill](https://zkillboard.com/kill/{kill_id}/) is worth {kill_score:.1f} "
                                        f"with the given character, and will chain for {time_bracket.total_seconds():.1f} seconds.")
             else:
-                kill_id, kill_time, kill_score, time_bracket = await get_kill_score(session, kill_id, kill_hash, rules)
                 await ctx.channel.send(f"This [kill](https://zkillboard.com/kill/{kill_id}/) is worth {kill_score:.1f} "
                                        f"points when using the largest ship as the ship of the contestant, "
                                        f"and will chain for {time_bracket.total_seconds():.1f} seconds.")
 
-    except ValueError:
-        await ctx.channel.send("Could not get all required responses from ESI / Zkill!")
+    except ValueError as instance:
+        await ctx.send(str(instance))
 
-
-# Run leaderboard command once to prefetch cache
-class Attribute(object):
-    pass
-
-
-class CtxDummy(object):
-    def __init__(self):
-        self.author = Attribute()
-        self.author.name = "Prefetcher"
-
-    async def send(self, text, **kwargs):
-        return
-
-
-if "SEED" in os.environ:
-    asyncio.run(leaderboard(CtxDummy()))
 
 bot.run(os.environ["TOKEN"])

@@ -40,7 +40,7 @@ async def lookup(string, return_type):
                         'https://esi.evetech.net/latest/universe/ids/?datasource=tranquility&language=en',
                         json=[string]) as response:
                     results = (await response.json())[return_type]
-                    return max(results, key=lambda x: x["id"])["id"]
+                    return int(max(results, key=lambda x: x["id"])["id"])
         except (ValueError, json.JSONDecodeError, KeyError):
             raise ValueError
 
@@ -110,7 +110,7 @@ async def get(session, url) -> dict:
                 return await response.json(content_type=None)
             except Exception as e:
                 logger.error(f"Error {e} with ESI {response.status}: {await response.text()}")
-        raise ValueError(f"Could not fetch data from url {url}!")
+        raise ValueError(f"Could not fetch data from ESI!")
 
 
 @async_lru.alru_cache(maxsize=4000, ttl=3600)

@@ -16,7 +16,7 @@ kill_cache = {}
 character_cache = {}
 
 
-async def get_kill_score(session, kill_id, kill_hash, rules, user_id=None):
+async def get_kill_score(session, kill_id, kill_hash, rules, main_character_id=None):
     """Fetch a single kill from ESI and calculate it's score according to the competition rules"""
     kill = await get_kill(session, kill_id, kill_hash)
 
@@ -30,10 +30,10 @@ async def get_kill_score(session, kill_id, kill_hash, rules, user_id=None):
     # If we have a defined protagonist, we go through all the attackers and assign points
     # The protagonist must fly some ship, otherwise 0 points, and only player characters count
     # Helpers get added as "unknown ship" if we can't figure out what they fly.
-    if user_id:
+    if main_character_id:
         for attacker in kill.get("attackers", []):
             if "character_id" in attacker:
-                if int(attacker["character_id"]) == user_id:
+                if int(attacker["character_id"]) == main_character_id:
                     if "ship_type_id" in attacker:
                         risk_adjusted_pilot_point = rules.risk_adjusted_points(attacker["ship_type_id"])
                 else:
@@ -198,7 +198,11 @@ async def get_collated_kills(session, rules, character_id):
     end = datetime(2024, 4, 1)
 
     logger.info(f"Starting fetch for character {character_id}")
-    usable_kills = await get_usable_kills(session, rules, character_id, start, end)
+    try:
+        usable_kills = await get_usable_kills(session, rules, character_id, start, end)
+    except ValueError as error_instance:
+        logger.warning(f"Could not determine total score for character {character_id}")
+        raise error_instance
 
     # Group kills based on their time bracket
     groups = {}
@@ -236,10 +240,7 @@ async def get_total_score(session, rules, character_id):
     Sum up all the scores according to the competition rules
     """
     score_groups = await get_collated_kills(session, rules, character_id)
-    try:
-        scores = [s for s, kills in score_groups]
-        total_score = sum(sorted(scores, reverse=True)[:30])
-    except ValueError:
-        logger.error(f"Could not determine total score for character {character_id}")
-        total_score = 0
+    scores = [s for s, kills in score_groups]
+    total_score = sum(sorted(scores, reverse=True)[:30])
+
     return round(total_score, 2)
