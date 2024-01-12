@@ -41,6 +41,85 @@ score_cache_last_updated = None
 score_cache_size = None
 
 
+async def get_user_scores(session, rules, ctx):
+    """Get the scores of all users currently registered in the competition.
+    With a cache of 1 hour. In case of a cache miss inform user through ctx."""
+    global score_cache
+    global score_cache_last_updated
+    global score_cache_size
+
+    # Find out how many users are registered
+    with shelve.open('data/linked_characters', writeback=True) as lc:
+
+        # Update cache if new users have been added, cache is more than 1h old or has never been fetched
+        if (
+                score_cache_last_updated is None
+                or score_cache_last_updated < datetime.utcnow() - timedelta(hours=1)
+                or score_cache_size < len(lc.items())
+        ):
+
+            users_done = []
+            user_scores = []
+            await ctx.send(f"Refetching ranking, this will take approximately {len(lc.items()) - 1} seconds.")
+
+            while len(users_done) < len(lc.items()) - 1:
+                for author, character_id in lc.items():
+                    if character_id not in users_done:
+                        try:
+                            score_groups, _ = await asyncio.gather(get_collated_kills(session, rules, character_id),
+                                                                   asyncio.sleep(1))
+                            user_score = get_total_score(score_groups)
+                        except (ValueError, AttributeError):
+                            await asyncio.sleep(1)  # Make sure zkill rate limit is not hit because of the error
+                        except aiohttp.http_exceptions.BadHttpMessage as error_instance:
+                            logger.error(f"Character {character_id} will not be completed ever!")
+                            raise error_instance
+                        else:
+                            logger.debug(f"Character {character_id} was completed.")
+                            users_done.append(character_id)
+                            user_scores.append([author, character_id, user_score])
+
+                logger.info(f"Completion {len(users_done)}/{len(lc.items()) - 1}")
+                await asyncio.sleep(1)
+
+            score_cache = user_scores
+            score_cache_last_updated = datetime.utcnow()
+            score_cache_size = len(lc.items()) - 1
+    return score_cache
+
+
+async def parse_character(author_id: str, character_name_array: tuple):
+    """Given a discord id and an input character, find a suitable character id and possesive form"""
+    if len(character_name_array) > 0:
+        character_name = " ".join(character_name_array)
+        character_id = await lookup(character_name, 'characters')
+        possesive = f"[{character_name}](https://zkillboard.com/character/{character_id}/) currently has"
+    else:
+        if author_id is not None:
+            try:
+                with shelve.open('data/linked_characters', writeback=True) as linked_characters:
+                    character_id = linked_characters[author_id]
+                possesive = "You currently have"
+            except KeyError:
+                raise ValueError("You do not have any linked character!")
+            except _gdbm.error:
+                raise ValueError("Currently busy with another command!")
+        else:
+            return None, None
+
+    return character_id, possesive
+
+
+def parse_kill_id(zkill_link: str) -> int:
+    # TODO: Add more variants of parsing a link.
+    try:
+        kill_id = int(zkill_link.split("/")[-2])
+    except IndexError:
+        raise ValueError(f"Invalid zkill_link: {zkill_link}")
+
+    return kill_id
+
+
 @bot.command()
 async def link(ctx, *character_name):
     """Links your character to take part in the competition."""
@@ -101,66 +180,27 @@ async def unlink(ctx):
         await ctx.send(f"Unlinked your character.")
 
 
-async def get_user_scores(session, rules, ctx):
-    global score_cache
-    global score_cache_last_updated
-    global score_cache_size
-
-    # Find out how many users are registered
-    with shelve.open('data/linked_characters', writeback=True) as lc:
-        amount = len(lc.items()) - 1
-
-        # Update cache if new users have been added, cache is more than 1h old or has never been fetched
-        if (score_cache_last_updated is None
-                or score_cache_last_updated < datetime.utcnow() - timedelta(hours=1)
-                or score_cache_size < amount):
-
-            users_done = []
-            user_scores = []
-            await ctx.send(f"Refetching ranking, this will take approximately {amount} seconds.")
-
-            while len(users_done) < amount:
-                for author, character_id in lc.items():
-                    if character_id not in users_done:
-                        try:
-                            user_score, _ = await asyncio.gather(get_total_score(session, rules, character_id),
-                                                                 asyncio.sleep(1))
-                            logger.debug(f"Character {character_id} was completed.")
-                        except (ValueError, AttributeError):
-                            await asyncio.sleep(1)  # Make sure zkill rate limit is not hit because of the error
-                        except aiohttp.http_exceptions.BadHttpMessage:
-                            amount -= 1
-                            logger.error(f"Character {character_id} will not be completed ever.")
-                        else:
-                            users_done.append(character_id)
-                            user_scores.append([author, character_id, user_score])
-
-                logger.info(f"Completion {len(users_done)}/{len(lc.items())}")
-                await asyncio.sleep(1)
-
-            score_cache = user_scores
-            score_cache_last_updated = datetime.utcnow()
-            score_cache_size = amount
-    return score_cache
-
-
 @bot.command()
 async def leaderboard(ctx, top=None):
     """Shows the current people with the most points."""
 
-    logger.info(f"{ctx.author.name} used !leaderboard")
-
     try:
-        async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
-            await rules.update(session)
+        # Log
+        logger.info(f"{ctx.author.name} used !leaderboard {top}")
 
+        # Execute command
+        async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
+            # Get data
+            await rules.update(session)
             user_scores = await get_user_scores(session, rules, ctx)
 
+            # Parse length of data to show
             if top is None:
                 top = 10
             elif top == "all" and str(ctx.author.id) in os.environ["PRIVILEGED_USERS"].split(" "):
                 top = len(user_scores)
 
+            # Build output
             output = "# Leaderboard\n"
             for count, (aid, cid, score) in enumerate(sorted(user_scores, reverse=True, key=lambda x: x[2])[:top]):
                 output += (
@@ -168,6 +208,7 @@ async def leaderboard(ctx, top=None):
                     f"(<https://zkillboard.com/character/{cid}/>) with {score:.1f} points\n"
                 )
 
+            # Send message
             await send_large_message(ctx, output, delimiter="\n", allowed_mentions=discord.AllowedMentions(users=False))
 
     except ValueError as instance:
@@ -178,13 +219,15 @@ async def leaderboard(ctx, top=None):
 async def ranking(ctx):
     """Shows the people around your current score."""
 
-    logger.info(f"{ctx.author.name} used !ranking")
-
     try:
+        # Log
+        logger.info(f"{ctx.author.name} used !ranking")
+
+        # Execute command
         async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
-            await rules.update(session)
 
             # Get data
+            await rules.update(session)
             user_scores = await get_user_scores(session, rules, ctx)
             users_leaderboard = sorted(user_scores, reverse=True, key=lambda x: x[2])
             author_ids = [aid for aid, _, _ in users_leaderboard]
@@ -202,45 +245,27 @@ async def ranking(ctx):
                            f"character/{cid}/>) with {score:.1f} points\n")
                 count += 1
 
+            # Send message
             await ctx.send(output, allowed_mentions=discord.AllowedMentions(users=False))
 
     except ValueError as instance:
         await ctx.send(str(instance))
 
 
-async def parse_character(author_id: str, character_name_array: tuple):
-    """Given a discord id and an input character, find a suitable character id and possesive form"""
-    if len(character_name_array) > 0:
-        character_name = " ".join(character_name_array)
-        character_id = await lookup(character_name, 'characters')
-        possesive = f"[{character_name}](https://zkillboard.com/character/{character_id}/) currently has"
-    else:
-        if author_id is not None:
-            try:
-                with shelve.open('data/linked_characters', writeback=True) as linked_characters:
-                    character_id = linked_characters[author_id]
-                possesive = "You currently have"
-            except KeyError:
-                raise ValueError("You do not have any linked character!")
-            except _gdbm.error:
-                raise ValueError("Currently busy with another command!")
-        else:
-            return None, None
-
-    return character_id, possesive
-
-
 @bot.command()
 async def points(ctx, *character_name):
     """Shows the total points someone achieved, defaults to your linked character."""
 
-    logger.info(f"{ctx.author.name} used !points")
-
     try:
+        # Parse arguments and log
+        character_id, predicate = await parse_character(str(ctx.author.id), character_name)
+        logger.info(f"{ctx.author.name} used !points {character_id}")
+
+        # Execute command
         async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
             await rules.update(session)
-            character_id, predicate = await parse_character(str(ctx.author.id), character_name)
-            await ctx.send(f"{predicate} {await get_total_score(session, rules, character_id)} points")
+            score_groups = await get_collated_kills(session, rules, character_id)
+            await ctx.send(f"{predicate} {await get_total_score(score_groups)} points")
 
     except ValueError as instance:
         await ctx.send(str(instance))
@@ -250,16 +275,21 @@ async def points(ctx, *character_name):
 async def breakdown(ctx, *character_name):
     """Shows a breakdown of how someone achieved their points, defaults to your linked character."""
 
-    logger.info(f"{ctx.author.name} used !breakdown")
-
     try:
+        # Parse arguments and log
+        character_id, predicate = await parse_character(str(ctx.author.id), character_name)
+        logger.info(f"{ctx.author.name} used !breakdown {character_id}")
+
+        # Execute command
         async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
             await rules.update(session)
-            character_id, predicate = await parse_character(str(ctx.author.id), character_name)
-            output = f"{predicate} the point distribution:\n"
 
-            point_strings = []
+            # Get data
             groups = await get_collated_kills(session, rules, character_id)
+
+            # Build output
+            output = f"{predicate} {get_total_score(groups)} points with the following distribution:\n"
+            point_strings = []
             for total_score, kills in sorted(groups, reverse=True)[0:30]:
                 if len(kills) == 1:
                     point_string = f"[**{total_score:.1f}**](<https://zkillboard.com/kill/{kills[0][0]}/>)"
@@ -273,43 +303,37 @@ async def breakdown(ctx, *character_name):
 
             if len(point_strings) == 0:
                 output += "- no points for this character so far."
+
+            # Send message
             await send_large_message(ctx, output, delimiter=",", allowed_mentions=discord.AllowedMentions(users=False))
 
     except ValueError as instance:
         await ctx.send(str(instance))
 
 
-def parse_kill_id(zkill_link: str) -> int:
-    # TODO: Add more variants of parsing a link.
-    try:
-        kill_id = int(zkill_link.split("/")[-2])
-    except IndexError:
-        raise ValueError(f"Invalid zkill_link: {zkill_link}")
-
-    return kill_id
-
-
 @bot.command()
 async def explain(ctx, zkill_link, *character_name):
     """Shows the total amount of points for some kill."""
 
-    logger.info(f"{ctx.author.name} used !explain")
-
     try:
+        # Parse arguments and log
+        kill_id = parse_kill_id(zkill_link)
+        character_id, _ = await parse_character(None, character_name)
+        logger.info(f"{ctx.author.name} used !explain {kill_id} {character_id}")
+
+        # Execute command
         async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
             await rules.update(session)
-            kill_id = parse_kill_id(zkill_link)
             kill_hash = await get_hash(session, kill_id)
-            character_id, _ = await parse_character(None, character_name)
             kill_id, kill_time, kill_score, time_bracket = await get_kill_score(session, kill_id, kill_hash, rules,
                                                                                 main_character_id=character_id)
             if character_id is not None:
-                await ctx.channel.send(f"This [kill](https://zkillboard.com/kill/{kill_id}/) is worth {kill_score:.1f} "
-                                       f"with the given character, and will chain for {time_bracket.total_seconds():.1f} seconds.")
+                explain_style = "when using the largest ship as the ship of the contestant"
             else:
-                await ctx.channel.send(f"This [kill](https://zkillboard.com/kill/{kill_id}/) is worth {kill_score:.1f} "
-                                       f"points when using the largest ship as the ship of the contestant, "
-                                       f"and will chain for {time_bracket.total_seconds():.1f} seconds.")
+                explain_style = "with the given character"
+
+            await ctx.channel.send(f"This [kill](https://zkillboard.com/kill/{kill_id}/) is worth {kill_score:.1f} "
+                                   f"{explain_style}, and will chain for {time_bracket.total_seconds():.1f} seconds.")
 
     except ValueError as instance:
         await ctx.send(str(instance))

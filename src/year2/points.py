@@ -235,11 +235,10 @@ async def get_collated_kills(session, rules, character_id):
     return score_groups
 
 
-async def get_total_score(session, rules, character_id):
+def get_total_score(score_groups):
     """
     Sum up all the scores according to the competition rules
     """
-    score_groups = await get_collated_kills(session, rules, character_id)
     scores = [s for s, kills in score_groups]
     total_score = sum(sorted(scores, reverse=True)[:30])
 

@@ -42,7 +42,7 @@ async def lookup(string, return_type):
                     results = (await response.json())[return_type]
                     return int(max(results, key=lambda x: x["id"])["id"])
         except (ValueError, json.JSONDecodeError, KeyError):
-            raise ValueError
+            raise ValueError("Could not parse that character!")
 
 
 @async_lru.alru_cache(maxsize=40000)
