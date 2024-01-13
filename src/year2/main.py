@@ -84,11 +84,12 @@ async def get_user_scores(session, rules, ctx):
                         user_scores.append([author, character_id, user_score])
 
             logger.info(f"Completion {len(users_done)}/{len(user_data)}")
+            logger.info(f"Missing {set(user_data.values()) - set(users_done)}")
             await asyncio.sleep(1)
 
         score_cache = user_scores
         score_cache_last_updated = datetime.utcnow()
-        score_cache_size = len(user_data) - 1
+        score_cache_size = len(user_data)
     return score_cache
 
 
@@ -217,6 +218,9 @@ async def leaderboard(ctx, top=None):
 
     except ValueError as instance:
         await ctx.send(str(instance))
+    except Exception as exception_instance:
+        await ctx.send("Unknown error. Try again and ping Larynx if it keeps happening.")
+        raise exception_instance
 
 
 @bot.command()
@@ -254,6 +258,9 @@ async def ranking(ctx):
 
     except ValueError as instance:
         await ctx.send(str(instance))
+    except Exception as exception_instance:
+        await ctx.send("Unknown error. Try again and ping Larynx if it keeps happening.")
+        raise exception_instance
 
 
 @bot.command()
@@ -273,6 +280,9 @@ async def points(ctx, *character_name):
 
     except ValueError as instance:
         await ctx.send(str(instance))
+    except Exception as exception_instance:
+        await ctx.send("Unknown error. Try again and ping Larynx if it keeps happening.")
+        raise exception_instance
 
 
 @bot.command()
@@ -313,6 +323,9 @@ async def breakdown(ctx, *character_name):
 
     except ValueError as instance:
         await ctx.send(str(instance))
+    except Exception as exception_instance:
+        await ctx.send("Unknown error. Try again and ping Larynx if it keeps happening.")
+        raise exception_instance
 
 
 @bot.command()
@@ -341,6 +354,9 @@ async def explain(ctx, zkill_link, *character_name):
 
     except ValueError as instance:
         await ctx.send(str(instance))
+    except Exception as exception_instance:
+        await ctx.send("Unknown error. Try again and ping Larynx if it keeps happening.")
+        raise exception_instance
 
 
 bot.run(os.environ["TOKEN"])
