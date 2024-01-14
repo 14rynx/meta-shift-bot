@@ -22,10 +22,10 @@ async def get_kill_score(session, kill_id, kill_hash, rules, main_character_id=N
 
     # ATTACKERS / VICTIM CALCULATION
     # Calculate points of each category
-    rarity_adjusted_victim_point = rules.rarity_adjusted_points(kill.get("victim", {}).get("ship_type_id", 0))
+    rarity_adjusted_victim_points = rules.rarity_adjusted(kill.get("victim", {}).get("ship_type_id", 0))
 
     standard_points = []
-    risk_adjusted_pilot_point = None
+    risk_adjusted_pilot_points = None
 
     # If we have a defined protagonist, we go through all the attackers and assign points
     # The protagonist must fly some ship, otherwise 0 points, and only player characters count
@@ -35,26 +35,26 @@ async def get_kill_score(session, kill_id, kill_hash, rules, main_character_id=N
             if "character_id" in attacker:
                 if int(attacker["character_id"]) == main_character_id:
                     if "ship_type_id" in attacker:
-                        risk_adjusted_pilot_point = rules.risk_adjusted_points(attacker["ship_type_id"])
+                        risk_adjusted_pilot_points = rules.risk_adjusted(attacker["ship_type_id"])
                 else:
-                    standard_points.append(rules.points(attacker.get("ship_type_id", 0)))
+                    standard_points.append(rules.base(attacker.get("ship_type_id", 0)))
 
     # If we don't have a clear protagonist, we have to assign one
     # First we collect all the points without protagonist, and use the risk adjusted point
     # To collect the difference (negative) if a guy were the protagonist
     else:
-        risk_adjusted_pilot_point = 0
+        risk_adjusted_pilot_points = 0
         for attacker in kill.get("attackers", []):
             if "character_id" in attacker:
-                standard_point = rules.points(attacker.get("ship_type_id", 0))
-                risk_point = rules.risk_adjusted_points(attacker.get("ship_type_id", 0))
+                standard_point = rules.base(attacker.get("ship_type_id", 0))
+                risk_point = rules.risk_adjusted(attacker.get("ship_type_id", 0))
                 standard_points.append(standard_point)
                 if risk_point and standard_point:
-                    risk_adjusted_pilot_point = min(risk_adjusted_pilot_point, risk_point - standard_point)
+                    risk_adjusted_pilot_points = min(risk_adjusted_pilot_points, risk_point - standard_point)
 
     # Combine points into preliminary score
     try:
-        kill_score = 10 * rarity_adjusted_victim_point / (risk_adjusted_pilot_point + sum(standard_points))
+        kill_score = 10 * rarity_adjusted_victim_points / (risk_adjusted_pilot_points + sum(standard_points))
     except (ZeroDivisionError, ValueError, TypeError):
         logger.info(f"Could not calculate score for kill {kill_id}")
         kill_score = 0
@@ -119,15 +119,17 @@ async def get_kill_score(session, kill_id, kill_hash, rules, main_character_id=N
     scaling_time = 60  # Time that changes based on sizes of killer / attackers
     attacker_scaling = 1.6  # How much having more people on a kill results in less time awwarded
 
+    time_adjusted_victim_points = rules.time_adjusted(kill.get("victim", {}).get("ship_type_id", 0))
+
     try:
         attacker_points = []
         for attacker in kill.get("attackers", []):
             if "character_id" in attacker:
-                attacker_points.append(rules.points(attacker.get("ship_type_id", 0)) ** attacker_scaling)
+                attacker_points.append(rules.base(attacker.get("ship_type_id", 0)) ** attacker_scaling)
 
         attacker_adjusted_points = sum(attacker_points) ** (1 / attacker_scaling)
         time_bracket = timedelta(
-            seconds=base_time + scaling_time * rarity_adjusted_victim_point / attacker_adjusted_points)
+            seconds=base_time + scaling_time * time_adjusted_victim_points / attacker_adjusted_points)
     except (ZeroDivisionError, ValueError, TypeError):
         logger.warning(f"Could not determine time_bracket for kill {kill_id}")
         time_bracket = timedelta(seconds=base_time + scaling_time)
