@@ -202,16 +202,20 @@ async def leaderboard(ctx, top=None):
             # Parse length of data to show
             if top is None:
                 top = 10
-            elif top == "all" and str(ctx.author.id) in os.environ["PRIVILEGED_USERS"].split(" "):
+            elif top in ["all", "csv"] and str(ctx.author.id) in os.environ["PRIVILEGED_USERS"].split(" "):
                 top = len(user_scores)
 
             # Build output
             output = "# Leaderboard\n"
             for count, (aid, cid, score) in enumerate(sorted(user_scores, reverse=True, key=lambda x: x[2])[:top]):
-                output += (
-                    f"{count + 1}: <@{aid}> [{await get_character_name(session, cid)}]"
-                    f"(<https://zkillboard.com/character/{cid}/>) with {score:.1f} points\n"
-                )
+                if top == "csv":
+                    output += f"{count + 1}, {(bot.get_user(aid)).name}, {await get_character_name(session, cid)}, {score:.1f}"
+                else:
+                    output += (
+                        f"{count + 1}: <@{aid}> [{await get_character_name(session, cid)}]"
+                        f"(<https://zkillboard.com/character/{cid}/>) with {score:.1f} points\n"
+                    )
+
 
             # Send message
             await send_large_message(ctx, output, delimiter="\n", allowed_mentions=discord.AllowedMentions(users=False))
