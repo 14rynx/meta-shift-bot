@@ -196,8 +196,8 @@ async def get_collated_kills(session, rules, character_id):
     Fetch all kills of a character for some period from zkill and do point calculation
     """
 
-    start = datetime(2024, 1, 1)
-    end = datetime(2024, 4, 1)
+    start = datetime(2024, 4, 1)
+    end = datetime(2024, 6, 1)
 
     logger.info(f"Starting fetch for character {character_id}")
     try:

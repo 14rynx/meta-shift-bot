@@ -30,7 +30,7 @@ intent.message_content = True
 client = discord.Client(intents=intent)
 
 bot = commands.Bot(command_prefix='!', intents=intent)
-rules = RulesConnector(1)
+rules = RulesConnector(season_id=2)
 
 # Adding ssl context because aiohttp doesn't come with certificates
 ssl_context = ssl.create_default_context(cafile=certifi.where())
