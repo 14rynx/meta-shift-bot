@@ -62,7 +62,7 @@ async def get_kill_score(session, kill_id, kill_hash, rules, main_character_id=N
     # EXCEPTIONS
     # Deal with all the kills that should awward no points
     # Remove kills in Tradehub systems
-    if kill.get("solar_system_id", 0) in [30000142, 30002187, 30002510, 30002053, 30002659, 30002768]:
+    if kill.get("solar_system_id", 0) in [30000142, 30002187, 30002510, 30002053, 30002659, 30002768, 30100000]:
         kill_score = 0
 
     # Remove kills where CONCORD had something to do with it
