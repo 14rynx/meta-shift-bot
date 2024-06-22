@@ -129,8 +129,10 @@ async def link(ctx, *character_name):
 
     user, _ = User.get_or_create(user_id=str(ctx.author.id))
 
-    entry, created = Entry.get_or_create(character_id=character_id, user=user, season=current_season,
-                                         defaults={"relinks": 5, "points": 0, "points_expiry": datetime.utcnow()})
+    entry, created = Entry.get_or_create(
+        user=user, season=current_season,
+        defaults={"relinks": 5, "points": 0, "points_expiry": datetime.utcnow(), "character_id": character_id}
+    )
 
     if created:
         await ctx.send(f"Linked [{character_name}](https://zkillboard.com/character/{character_id}/)")
