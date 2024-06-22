@@ -8,5 +8,6 @@ services:
       .env
     volumes:
       - data:/data
+      - ./bot.db:/data/bot.db
 volumes:
   data:
