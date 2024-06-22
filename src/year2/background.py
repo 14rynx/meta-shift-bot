@@ -27,22 +27,24 @@ async def refresh_scores(rules, max_delay):
             async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
                 await rules.update(session)
 
-                try:
-                    score_groups, _ = await asyncio.gather(
-                        get_collated_kills(session, rules, int(entry.character_id)),
-                        asyncio.sleep(1))
-                    user_score = get_total_score(score_groups)
-                except (ValueError, AttributeError):
-                    logger.error(f"Character {entry.character_id} failed!", exc_info=True)
-                    await asyncio.sleep(1)  # Make sure zkill rate limit is not hit because of the error
-                except aiohttp.http_exceptions.BadHttpMessage as error_instance:
-                    logger.error(f"Character {entry.character_id} will not be completed ever!")
-                    raise error_instance
-                else:
+                worked = False
+                for x in range(5):
+                    try:
+                        score_groups, _ = await asyncio.gather(
+                            get_collated_kills(session, rules, int(entry.character_id)),
+                            asyncio.sleep(1))
+                        user_score = get_total_score(score_groups)
+                        worked = True
+                    except (ValueError, AttributeError,  aiohttp.http_exceptions.BadHttpMessag):
+                        await asyncio.sleep(1)  # Make sure zkill rate limit is not hit because of the error
+
+                if worked:
                     logger.info(f"{entry.character_id} scored {user_score} points")
                     entry.points_expiry = datetime.utcnow() + max_delay
                     entry.points = user_score
                     entry.save()
+                else:
+                    logger.error(f"Character {entry.character_id} failed!")
 
             await asyncio.sleep(refresh_interval)
 
