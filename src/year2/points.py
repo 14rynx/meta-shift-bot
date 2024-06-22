@@ -7,7 +7,7 @@ from network import get_kill_page, get_item_metalevel, get_ship_slots, get_kill
 
 # Configure the logger
 logger = logging.getLogger('discord.points')
-logger.setLevel(logging.WARNING)
+logger.setLevel(logging.ERROR)
 handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
 handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
 logger.addHandler(handler)

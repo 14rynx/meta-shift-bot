@@ -9,7 +9,7 @@ import certifi
 
 # Configure the logger
 logger = logging.getLogger('discord.network')
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.ERROR)
 handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
 handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
 logger.addHandler(handler)
@@ -125,8 +125,8 @@ async def get_kill_page(session, character_id, page):
             if response.status == 200:
                 try:
                     kills = await response.json(content_type=None)
-                except Exception as e:
-                    logger.error(f"{character_id}, {page}, retry {attempt}, {e}, {await response.text()}")
+                except Exception as instance:
+                    logger.error(f"Could not parse JSON: {await response.text()}", exc_info=True)
                 else:
                     break
             elif response.status == 429:

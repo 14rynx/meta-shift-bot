@@ -54,17 +54,16 @@ async def update_scores_now(ctx, session, rules):
     while expired_entries.count() > 0:
         for entry in expired_entries:
             try:
-                score_groups, _ = await asyncio.gather(get_collated_kills(session, rules, int(entry.character_id)),
-                                                       asyncio.sleep(1))
+                score_groups, _ = await asyncio.gather(
+                    get_collated_kills(session, rules, int(entry.character_id)),
+                    asyncio.sleep(1)
+                )
                 user_score = get_total_score(score_groups)
-            except (ValueError, AttributeError, TimeoutError):
+            except (ValueError, AttributeError, TimeoutError, aiohttp.http_exceptions.BadHttpMessage): # noqa
                 await asyncio.sleep(1)  # Make sure zkill rate limit is not hit because of the error
-            except aiohttp.http_exceptions.BadHttpMessage as error_instance:
-                logger.error(f"Character {entry.character_id} will not be completed ever!")
-                raise error_instance
+                logger.warning(f"Updating character {entry.character_id} failed, retrying.")
             else:
-                logger.info(f"{entry.character_id} scored {user_score} points")
-                logger.debug(f"Character {entry.character_id} was completed.")
+                logger.debug(f"Character {entry.character_id} scored {user_score} points")
                 entry.points_expiry = datetime.utcnow() + max_delay
                 entry.points = user_score
                 entry.save()
@@ -91,7 +90,7 @@ async def find_character_id(author_id: str, character_name_array: tuple):
                 entry = Entry.get(user=user, season=current_season)
                 character_id = entry.character_id
                 possesive = "You currently have"
-            except (User.DoesNotExist, Entry.DoesNotExist):
+            except (User.DoesNotExist, Entry.DoesNotExist): # noqa
                 raise ValueError("You do not have any linked character!")
         else:
             return None, None
@@ -168,12 +167,9 @@ async def unlink(ctx):
 @bot.command()
 async def leaderboard(ctx, top=None):
     """Shows the current people with the most points."""
+    logger.info(f"{ctx.author.name} used !leaderboard {top}")
 
     try:
-        # Log
-        logger.info(f"{ctx.author.name} used !leaderboard {top}")
-
-        # Execute command
         async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
 
             # Ensure all data is up-to-date
@@ -199,25 +195,20 @@ async def leaderboard(ctx, top=None):
                         f"(<https://zkillboard.com/character/{entry.character_id}/>) with {entry.points:.1f} points\n"
                     )
 
-            # Send message
             await send_large_message(ctx, output, delimiter="\n", allowed_mentions=discord.AllowedMentions(users=False))
 
-    except ValueError as instance:
-        await ctx.send(str(instance))
-    except Exception as exception_instance:
-        await ctx.send("Unknown error. Try again and ping Larynx if it keeps happening.")
-        raise exception_instance
+    except Exception as instance:
+        logger.error("Error in command !leaderboard:", exc_info=True)
+        await ctx.send(f"Error: {instance}. Try again and ping Larynx if it keeps happening.")
+
 
 
 @bot.command()
 async def ranking(ctx):
     """Shows the people around your current score."""
+    logger.info(f"{ctx.author.name} used !ranking")
 
     try:
-        # Log
-        logger.info(f"{ctx.author.name} used !ranking")
-
-        # Execute command
         async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
 
             # Ensure all data is up-to-date
@@ -243,14 +234,11 @@ async def ranking(ctx):
                 )
                 count += 1
 
-            # Send message
             await send_large_message(ctx, output, delimiter="\n", allowed_mentions=discord.AllowedMentions(users=False))
 
-    except ValueError as instance:
-        await ctx.send(str(instance))
-    except Exception as exception_instance:
-        await ctx.send("Unknown error. Try again and ping Larynx if it keeps happening.")
-        raise exception_instance
+    except Exception as instance:
+        logger.error("Error in command !ranking:", exc_info=True)
+        await ctx.send(f"Error: {instance}. Try again and ping Larynx if it keeps happening.")
 
 
 @bot.command()
@@ -271,11 +259,9 @@ async def points(ctx, *character_name):
 
             await ctx.send(f"{predicate} {get_total_score(score_groups)} points")
 
-    except ValueError as instance:
-        await ctx.send(str(instance))
-    except Exception as exception_instance:
-        await ctx.send("Unknown error. Try again and ping Larynx if it keeps happening.")
-        raise exception_instance
+    except Exception as instance:
+        logger.error("Error in command !points:", exc_info=True)
+        await ctx.send(f"Error: {instance}. Try again and ping Larynx if it keeps happening.")
 
 
 @bot.command()
@@ -314,11 +300,9 @@ async def breakdown(ctx, *character_name):
             # Send message
             await send_large_message(ctx, output, delimiter=",", allowed_mentions=discord.AllowedMentions(users=False))
 
-    except ValueError as instance:
-        await ctx.send(str(instance))
-    except Exception as exception_instance:
-        await ctx.send("Unknown error. Try again and ping Larynx if it keeps happening.")
-        raise exception_instance
+    except Exception as instance:
+        logger.error("Error in command !breakdown:", exc_info=True)
+        await ctx.send(f"Error: {instance}. Try again and ping Larynx if it keeps happening.")
 
 
 @bot.command()
@@ -346,11 +330,9 @@ async def explain(ctx, zkill_link, *character_name):
             await ctx.channel.send(f"This [kill](https://zkillboard.com/kill/{kill_id}/) is worth {kill_score:.1f} "
                                    f"{explain_style}, and will chain for {time_bracket.total_seconds():.1f} seconds.")
 
-    except ValueError as instance:
-        await ctx.send(str(instance))
-    except Exception as exception_instance:
-        await ctx.send("Unknown error. Try again and ping Larynx if it keeps happening.")
-        raise exception_instance
+    except Exception as instance:
+        logger.error("Error in command !explain:", exc_info=True)
+        await ctx.send(f"Error: {instance}. Try again and ping Larynx if it keeps happening.")
 
 
 bot.run(os.environ["TOKEN"])
