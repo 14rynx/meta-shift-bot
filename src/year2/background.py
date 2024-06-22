@@ -11,7 +11,7 @@ from points import get_total_score, get_collated_kills
 
 # Configure the logger
 logger = logging.getLogger('discord.background')
-logger.setLevel(logging.WARNING)
+logger.setLevel(logging.INFO)
 
 ssl_context = ssl.create_default_context(cafile=certifi.where())
 
@@ -21,7 +21,7 @@ async def refresh_scores(rules, max_delay):
     """Background task to refresh all user scores periodically."""
 
     while True:
-        refresh_interval = max_delay.total_seconds() / (rules.season.entries.count() + 1)
+        refresh_interval = max_delay.total_seconds() / (2 * rules.season.entries.count() + 1)
 
         for entry in rules.season.entries:
             async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
@@ -35,7 +35,7 @@ async def refresh_scores(rules, max_delay):
                             asyncio.sleep(1))
                         user_score = get_total_score(score_groups)
                         worked = True
-                    except (ValueError, AttributeError,  aiohttp.http_exceptions.BadHttpMessag):
+                    except (ValueError, AttributeError, aiohttp.http_exceptions.BadHttpMessage):
                         await asyncio.sleep(1)  # Make sure zkill rate limit is not hit because of the error
 
                 if worked:
