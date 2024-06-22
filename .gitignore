@@ -1,4 +1,4 @@
 credentials.json
 .idea
 .env
-bot.db
+db.sqlite
