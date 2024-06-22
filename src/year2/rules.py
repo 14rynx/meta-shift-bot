@@ -20,10 +20,10 @@ class PointColumn:
             self.missing.add(type_id)
             return None
 
-    def fetch(self, season_id, sheet):
+    def fetch(self, season, sheet):
         """Fetch and parse one set of points from a spreadsheet"""
         end = chr(ord(self.location) + 1)
-        _range = f'Season {season_id}!{self.location}3:{end}'
+        _range = f'{season.name}!{self.location}3:{end}'
         result = sheet.values().get(spreadsheetId=os.environ["SPREADSHEET_ID"], range=_range).execute()
         values = result.get('values', [])
 
@@ -37,12 +37,12 @@ class PointColumn:
             else:
                 self.values[item_id] = point_value
 
-    async def write_back(self, season_id, sheet, session):
+    async def write_back(self, season, sheet, session):
         """For any values that could not be found, add a new entry to the spreadsheet"""
         body = {'values': [[type_id, "TODO", await get_item_name(session, type_id)] for type_id in self.missing]}
 
         result = sheet.values().get(spreadsheetId=os.environ["SPREADSHEET_ID"],
-                                    range=f'Season {season_id}!{self.location}3:{self.location}').execute()
+                                    range=f'{season.name}!{self.location}3:{self.location}').execute()
         values = result.get('values', [])
         start_column = len(values) + 3
         end_column = len(body["values"]) + start_column - 1
@@ -51,21 +51,21 @@ class PointColumn:
 
         sheet.values().update(
             spreadsheetId=os.environ["SPREADSHEET_ID"],
-            range=f'Season {season_id}!{self.location}{start_column}:{end}{end_column}',
+            range=f'{season.name}!{self.location}{start_column}:{end}{end_column}',
             valueInputOption="USER_ENTERED", body=body
         ).execute()
 
         self.missing = set()
 
-    async def update(self, season_id, sheet, session):
+    async def update(self, season, sheet, session):
         """Fetch and write back"""
-        self.fetch(season_id, sheet)
-        await self.write_back(season_id, sheet, session)
+        self.fetch(season, sheet)
+        await self.write_back(season, sheet, session)
 
 
 class RulesConnector:
-    def __init__(self, season_id):
-        self.season_id = season_id
+    def __init__(self, season):
+        self.season = season
 
         self.base = PointColumn("A")
         self.rarity_adjusted = PointColumn("E")
@@ -84,9 +84,9 @@ class RulesConnector:
             service = discovery.build('sheets', 'v4', credentials=credentials)
             sheet = service.spreadsheets()
 
-            await self.base.update(self.season_id, sheet, session)
-            await self.rarity_adjusted.update(self.season_id, sheet, session)
-            await self.risk_adjusted.update(self.season_id, sheet, session)
-            await self.time_adjusted.update(self.season_id, sheet, session)
+            await self.base.update(self.season, sheet, session)
+            await self.rarity_adjusted.update(self.season, sheet, session)
+            await self.risk_adjusted.update(self.season, sheet, session)
+            await self.time_adjusted.update(self.season, sheet, session)
 
             service.close()

@@ -1,7 +1,7 @@
 from peewee import *
 
 # Initialize the database
-db = SqliteDatabase('data/bot.db')
+db = SqliteDatabase('data/db.sqlite')
 
 
 class BaseModel(Model):
@@ -15,6 +15,8 @@ class User(BaseModel):
 
 class Season(BaseModel):
     name = CharField(primary_key=True)
+    start = DateTimeField()
+    end = DateTimeField()
 
 
 class Entry(BaseModel):

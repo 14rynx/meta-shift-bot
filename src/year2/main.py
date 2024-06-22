@@ -31,9 +31,9 @@ bot = commands.Bot(command_prefix='!', intents=intent)
 # Initialize Database
 initialize_database()
 
-# Set up current stuff
-current_season, created = Season.get_or_create(name="Season 2")
-rules = RulesConnector(season_id=2)
+# Get current season
+current_season = Season.get(name="Season 2")
+rules = RulesConnector(current_season)
 
 # Adding ssl context because aiohttp doesn't come with certificates
 ssl_context = ssl.create_default_context(cafile=certifi.where())

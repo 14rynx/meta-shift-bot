@@ -140,7 +140,7 @@ async def get_kill_score(session, kill_id, kill_hash, rules, main_character_id=N
     return kill_id, kill_time, kill_score, time_bracket
 
 
-async def get_usable_kills(session, rules, character_id, start, end):
+async def get_usable_kills(session, rules, character_id):
     """Fetch all kills for a character in a given time frame"""
     usable_kills = {}
     over = False
@@ -173,9 +173,9 @@ async def get_usable_kills(session, rules, character_id, start, end):
             if kill_id in kill_cache:
                 kill_time, kill_score, time_bracket = kill_cache[kill_id]
                 # If a kill is too far in the past, then we do not include it
-                if start < kill_time < end:
+                if rules.season.start < kill_time < rules.season.end:
                     usable_kills[kill_id] = (kill_time, kill_score, time_bracket)
-                elif kill_time < start:
+                elif kill_time < rules.season.start:
                     over = True
             else:
                 tasks.append(get_kill_score(session, kill_id, kill_hash, rules, character_id))
@@ -184,9 +184,9 @@ async def get_usable_kills(session, rules, character_id, start, end):
         for kill_id, kill_time, kill_score, time_bracket in await asyncio.gather(*tasks):
             kill_cache[kill_id] = (kill_time, kill_score, time_bracket)
 
-            if start < kill_time < end:
+            if rules.season.start < kill_time < rules.season.end:
                 usable_kills[kill_id] = (kill_time, kill_score, time_bracket)
-            elif kill_time < start:
+            elif kill_time < rules.season.start:
                 over = True
     return usable_kills
 
@@ -196,12 +196,9 @@ async def get_collated_kills(session, rules, character_id):
     Fetch all kills of a character for some period from zkill and do point calculation
     """
 
-    start = datetime(2024, 4, 1)
-    end = datetime(2024, 6, 1)
-
-    logger.info(f"Starting fetch for character {character_id}")
+    logger.info(f"Starting fetch for character {character_id} {rules.season} {rules.season}")
     try:
-        usable_kills = await get_usable_kills(session, rules, character_id, start, end)
+        usable_kills = await get_usable_kills(session, rules, character_id)
     except ValueError as error_instance:
         logger.warning(f"Could not determine total score for character {character_id}")
         raise error_instance
