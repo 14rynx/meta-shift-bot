@@ -1,7 +1,6 @@
 import asyncio
 import logging
 import os
-import shelve
 import ssl
 from datetime import datetime, timedelta
 
@@ -31,8 +30,8 @@ bot = commands.Bot(command_prefix='!', intents=intent)
 # Initialize Database
 initialize_database()
 
-# Get current season
-current_season = Season.get(name="Season 2")
+# Get the newest season that already started
+current_season = Season.select().where(Season.start <= datetime.utcnow()).order_by(Season.start.desc()).get()
 rules = RulesConnector(current_season)
 
 # Adding ssl context because aiohttp doesn't come with certificates
@@ -42,9 +41,18 @@ ssl_context = ssl.create_default_context(cafile=certifi.where())
 max_delay = timedelta(hours=1)
 
 
-async def update_scores_now(session, rules):
-    for entry in current_season.entries:
-        if entry.points_expiry < datetime.utcnow():
+async def update_scores_now(ctx, session, rules):
+    await rules.update(session)
+
+    # Query the database to find entries with expired points
+    expired_entries = rules.season.entries.filter(Entry.points_expiry < datetime.utcnow())
+
+    # If there are more than 3 expired entries, send a message to ctx
+    if expired_entries.count() > 3:
+        await ctx.send("Refreshing some scores, this might take a bit...")
+
+    while expired_entries.count() > 0:
+        for entry in expired_entries:
             try:
                 score_groups, _ = await asyncio.gather(get_collated_kills(session, rules, int(entry.character_id)),
                                                        asyncio.sleep(1))
@@ -60,6 +68,9 @@ async def update_scores_now(session, rules):
                 entry.points_expiry = datetime.utcnow() + max_delay
                 entry.points = user_score
                 entry.save()
+
+        # Update expired entries
+        expired_entries = rules.season.entries.filter(Entry.points_expiry < datetime.utcnow())
 
 
 async def find_character_id(author_id: str, character_name_array: tuple):
@@ -100,7 +111,7 @@ def find_kill_id(zkill_link: str) -> int:
 
 @bot.event
 async def on_ready():
-    refresh_scores.start(rules, current_season, max_delay)
+    refresh_scores.start(rules, max_delay)
 
 
 @bot.command()
@@ -162,9 +173,9 @@ async def leaderboard(ctx, top=None):
 
         # Execute command
         async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
-            # Get data
-            await rules.update(session)
-            await update_scores_now(session, rules)
+
+            # Ensure all data is up-to-date
+            await update_scores_now(ctx, session, rules)
 
             # Parse length of data to show
             if top is None:
@@ -206,9 +217,9 @@ async def ranking(ctx):
 
         # Execute command
         async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
-            # Get data
-            await rules.update(session)
-            await update_scores_now(session, rules)
+
+            # Ensure all data is up-to-date
+            await update_scores_now(ctx, session, rules)
 
             # Fetch user scores from the database
             user_entries = current_season.entries.order_by(Entry.points.desc())
@@ -251,8 +262,11 @@ async def points(ctx, *character_name):
 
         # Execute command
         async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
+
+            # Get data
             await rules.update(session)
             score_groups = await get_collated_kills(session, rules, character_id)
+
             await ctx.send(f"{predicate} {get_total_score(score_groups)} points")
 
     except ValueError as instance:
@@ -273,9 +287,9 @@ async def breakdown(ctx, *character_name):
 
         # Execute command
         async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
-            await rules.update(session)
 
             # Get data
+            await rules.update(session)
             groups = await get_collated_kills(session, rules, character_id)
 
             # Build output
@@ -317,6 +331,7 @@ async def explain(ctx, zkill_link, *character_name):
 
         # Execute command
         async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
+
             await rules.update(session)
             kill_hash = await get_hash(session, kill_id)
             kill_id, kill_time, kill_score, time_bracket = await get_kill_score(session, kill_id, kill_hash, rules,
