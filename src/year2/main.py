@@ -57,7 +57,7 @@ async def update_scores_now(ctx, session, rules):
                 score_groups, _ = await asyncio.gather(get_collated_kills(session, rules, int(entry.character_id)),
                                                        asyncio.sleep(1))
                 user_score = get_total_score(score_groups)
-            except (ValueError, AttributeError):
+            except (ValueError, AttributeError, TimeoutError):
                 await asyncio.sleep(1)  # Make sure zkill rate limit is not hit because of the error
             except aiohttp.http_exceptions.BadHttpMessage as error_instance:
                 logger.error(f"Character {entry.character_id} will not be completed ever!")
