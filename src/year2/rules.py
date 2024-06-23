@@ -11,13 +11,16 @@ class PointColumn:
     def __init__(self, location):
         self.values = {}
         self.location = location
+        self.unknown_values = set()
         self.missing = set()
 
-    def __call__(self, type_id):
+    def __call__(self, kill_fragment):
+        type_id = kill_fragment.get("ship_type_id", 0)
         try:
             return self.values[type_id]
         except KeyError:
-            self.missing.add(type_id)
+            if type_id not in self.unknown_values:
+                self.missing.add(type_id)
             return None
 
     def fetch(self, season, sheet):
@@ -30,12 +33,16 @@ class PointColumn:
         for line in values:
             try:
                 item_id, point_value = line
-                point_value = float(point_value.replace(",", "."))
                 item_id = int(item_id)
             except ValueError:
                 continue
             else:
-                self.values[item_id] = point_value
+                try:
+                    point_value = float(point_value.replace(",", "."))
+                except ValueError:
+                    self.unknown_values.add(item_id)
+                else:
+                    self.values[item_id] = point_value
 
     async def write_back(self, season, sheet, session):
         """For any values that could not be found, add a new entry to the spreadsheet"""

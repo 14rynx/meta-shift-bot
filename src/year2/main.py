@@ -12,7 +12,7 @@ from discord.ext import commands
 from background import refresh_scores
 from models import initialize_database, User, Season, Entry
 from network import lookup, get_hash, get_character_name
-from points import get_total_score, get_collated_kills, get_kill_score
+from points import get_total_score, get_collated_scores, get_kill_score
 from rules import RulesConnector
 from utils import send_large_message
 
@@ -55,7 +55,7 @@ async def update_scores_now(ctx, session, rules):
         for entry in expired_entries:
             try:
                 score_groups, _ = await asyncio.gather(
-                    get_collated_kills(session, rules, int(entry.character_id)),
+                    get_collated_scores(session, rules, int(entry.character_id)),
                     asyncio.sleep(1)
                 )
                 user_score = get_total_score(score_groups)
@@ -255,7 +255,7 @@ async def points(ctx, *character_name):
 
             # Get data
             await rules.update(session)
-            score_groups = await get_collated_kills(session, rules, character_id)
+            score_groups = await get_collated_scores(session, rules, character_id)
 
             await ctx.send(f"{predicate} {get_total_score(score_groups)} points")
 
@@ -278,7 +278,7 @@ async def breakdown(ctx, *character_name):
 
             # Get data
             await rules.update(session)
-            groups = await get_collated_kills(session, rules, character_id)
+            groups = await get_collated_scores(session, rules, character_id)
 
             # Build output
             output = f"{predicate} {get_total_score(groups)} points with the following distribution:\n"

@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import ssl
+from datetime import datetime
 
 import aiohttp
 import async_lru
@@ -10,9 +11,8 @@ import certifi
 # Configure the logger
 logger = logging.getLogger('discord.network')
 logger.setLevel(logging.ERROR)
-handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
-handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
-logger.addHandler(handler)
+
+kill_cache = {}
 
 
 async def lookup(string, return_type):
@@ -144,3 +144,44 @@ async def get_kill_page(session, character_id, page):
         kills_and_hashes = [(k, h) for k, h in kills_and_hashes if h != "CCP VERIFIED"]
 
     return kills_and_hashes
+
+
+async def get_kill_pages(session, character_id, start):
+    """Fetch all kills for a character up to a certain start time.
+    Start time is inexact, some kills before might be returned"""
+    over = False
+
+    for page in range(1, 100):
+        if over:
+            break
+
+        kills_and_hashes = await get_kill_page(session, character_id, page)
+
+        # Check if the response is empty. If so we reached the last page and can stop
+        if len(kills_and_hashes) == 0:
+            over = True
+
+        # Check if the last kill (smallest id) is old enough
+        kill_id, kill_hash = min(kills_and_hashes, key=lambda x: x[0])
+        first_kill = await get_kill(session, kill_id, kill_hash)
+        first_kill_time = datetime.strptime(first_kill.get('killmail_time'), '%Y-%m-%dT%H:%M:%SZ')
+
+        logger.debug(f"Page {page}: first kill_id {kill_id}, time {first_kill_time}-")
+        if first_kill_time < start:
+            over = True
+
+        # If the last kill is already in the stored data we have reached far enough
+        # (Kills getting added later on far in the past are ignored)
+        if character_id in kill_cache and kill_id in kill_cache[character_id]:
+            over = True
+
+        # Update per character cache and get kills from it if there are any
+        if character_id in kill_cache:
+            kill_cache[character_id].extend(kills_and_hashes)
+        else:
+            kill_cache[character_id] = kills_and_hashes
+
+        # Sleep on smaller pages to not trigger 429 on zkillboard.com
+        await asyncio.sleep(1)
+
+    return kill_cache[character_id]

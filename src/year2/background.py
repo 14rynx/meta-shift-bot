@@ -8,7 +8,7 @@ import certifi
 from discord.ext import tasks
 
 from models import Entry
-from points import get_total_score, get_collated_kills
+from points import get_total_score, get_collated_scores
 
 # Configure the logger
 logger = logging.getLogger('discord.background')
@@ -26,7 +26,7 @@ async def refresh_scores(rules, max_delay):
 
         refresh_entries = rules.season.entries.filter(Entry.points_expiry < datetime.utcnow() + max_delay / 2)
 
-        logger.debug(f"Updating {refresh_entries.count()} entries.")
+        logger.info(f"Updating {refresh_entries.count()} entries.")
 
         for entry in refresh_entries:
             async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
@@ -34,9 +34,12 @@ async def refresh_scores(rules, max_delay):
 
                 worked = False
                 for _ in range(5):
+                    if worked:
+                        break
+
                     try:
                         score_groups, _ = await asyncio.gather(
-                            get_collated_kills(session, rules, int(entry.character_id)),
+                            get_collated_scores(session, rules, int(entry.character_id)),
                             asyncio.sleep(1))
                         user_score = get_total_score(score_groups)
                         worked = True
