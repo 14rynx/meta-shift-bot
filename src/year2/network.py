@@ -185,4 +185,6 @@ async def get_kill_pages(session, character_id, start):
         # Sleep on smaller pages to not trigger 429 on zkillboard.com
         await asyncio.sleep(2)
 
-    return kill_cache[character_id]
+    if character_id in kill_cache:
+        return kill_cache[character_id]
+    return []
