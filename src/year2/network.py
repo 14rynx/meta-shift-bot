@@ -160,6 +160,7 @@ async def get_kill_pages(session, character_id, start):
         # Check if the response is empty. If so we reached the last page and can stop
         if len(kills_and_hashes) == 0:
             over = True
+            continue
 
         # Check if the last kill (smallest id) is old enough
         kill_id, kill_hash = min(kills_and_hashes, key=lambda x: x[0])
