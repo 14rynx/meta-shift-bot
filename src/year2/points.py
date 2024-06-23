@@ -2,7 +2,6 @@ import asyncio
 import logging
 import math
 from datetime import datetime, timedelta
-from functools import wraps
 
 from network import get_item_metalevel, get_ship_slots, get_kill, get_kill_pages
 
@@ -11,6 +10,7 @@ logger = logging.getLogger('discord.points')
 logger.setLevel(logging.ERROR)
 
 score_cache_dict = {}
+
 
 async def get_average_meta_level(session, kill):
     """
@@ -33,10 +33,10 @@ async def get_average_meta_level(session, kill):
     if sum(slots) > 0:
         average_meta_level = sum(meta_levels.values()) / sum(slots)
     elif len(meta_levels) > 0:
-        logger.info(f"Could not determine slots for kill {kill['killmail_id']}.")
+        logger.debug(f"Could not determine slots for kill {kill['killmail_id']}.")
         average_meta_level = sum(meta_levels.values()) / len(meta_levels.values())
     else:
-        logger.info(f"Could not calculate meta level for kill {kill['killmail_id']}.")
+        logger.debug(f"Could not calculate meta level for kill {kill['killmail_id']}.")
         average_meta_level = 5  # T2
 
     return average_meta_level
@@ -122,32 +122,6 @@ def kill_is_valid(kill):
     return True
 
 
-def score_cache(func):
-    """Cache scores based on kill_id and main_character_id"""
-
-    @wraps(func)
-    async def wrapper(*args, **kwargs):
-        # Extract the kill_id and main_character_id from the arguments
-        kill_id = kwargs.get('kill_id')
-        main_character_id = kwargs.get('main_character_id')
-
-        # Create a cache key based on the kill_id and main_character_id
-        cache_key = (kill_id, main_character_id)
-
-        # Check if the result is already in the cache
-        if cache_key in score_cache_dict:
-            return score_cache_dict[cache_key]
-
-        # If not in cache, call the function and store the result
-        result = await func(*args, **kwargs)
-        score_cache_dict[cache_key] = result
-
-        return result
-
-    return wrapper
-
-
-@score_cache
 async def get_kill_score(session, kill_id, kill_hash, rules, main_character_id=None):
     """Fetch a single kill from ESI and calculate it's score according to the competition rules"""
     kill = await get_kill(session, kill_id, kill_hash)
@@ -197,13 +171,26 @@ async def get_kill_score(session, kill_id, kill_hash, rules, main_character_id=N
     try:
         kill_score = 10 * rarity_adjusted_victim_points / (risk_adjusted_pilot_points + sum(standard_points))
     except (ZeroDivisionError, ValueError, TypeError):
-        logger.info(f"Could not calculate score for kill {kill_id}")
+        logger.debug(f"Could not calculate score for kill {kill_id}")
         kill_score = 0
 
-    logger.debug(f"Kill {kill_id} is worth {kill_score} points.")
+    logger.info(f"Kill {kill_id} is worth {kill_score} points.")
     kill_score = await scale_score_on_meta_level(kill_score, session, kill)
 
     return kill_id, kill_time, kill_score, time_bracket
+
+
+async def get_kill_score_cached(session, kill_id, kill_hash, rules, main_character_id=None):
+    """Cache kill score based on kill_id and main_character_id"""
+
+    cache_key = (kill_id, main_character_id)
+
+    if cache_key in score_cache_dict:
+        return score_cache_dict[cache_key]
+
+    result = await get_kill_score(session, kill_id, kill_hash, rules, main_character_id)
+    score_cache_dict[cache_key] = result
+    return result
 
 
 async def get_kill_scores(session, rules, character_id):
@@ -214,7 +201,7 @@ async def get_kill_scores(session, rules, character_id):
     # Find all kills that are already in cache
     tasks = []
     for kill_id, kill_hash in kills_and_hashes:
-        tasks.append(get_kill_score(session, kill_id, kill_hash, rules, character_id))
+        tasks.append(get_kill_score_cached(session, kill_id, kill_hash, rules, character_id))
 
     # Fetch scores
     usable_kills = []
@@ -229,14 +216,14 @@ async def get_collated_scores(session, rules, character_id):
     Fetch all kills of a character for some period from zkill and do point calculation
     """
 
-    logger.info(f"Starting fetch for character {character_id} {rules.season} {rules.season}")
+    logger.info(f"Starting fetch for character {character_id}.")
     try:
         kill_scores = await get_kill_scores(session, rules, character_id)
     except ValueError as error_instance:
         logger.warning(f"Could not determine total score for character {character_id}")
         raise error_instance
 
-    logger.info(f"Got {len(kill_scores)} kills...")
+    logger.debug(f"fetched {len(kill_scores)} kills for {character_id}")
 
     # Group kills based on their time bracket
     groups = {}
@@ -262,7 +249,7 @@ async def get_collated_scores(session, rules, character_id):
         for i, (kill_id, kill_score) in enumerate(kills):
             # Geometric sum style formula e.g. for 2 results in 1, 1.5, 1.75, 1.875 ... 2 - e
             multiplier = max_multiplier - max_multiplier ** -i
-            logger.info(f"Multiplier {multiplier}")
+            logger.debug(f"Group {last_id} multiplier {multiplier}.")
             stapled_score += kill_score * multiplier
         score_groups.append((stapled_score, kills))
 
