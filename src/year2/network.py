@@ -61,7 +61,7 @@ async def get_character_name(session, character_id):
         return f"CID: {character_id}"
 
 
-@async_lru.alru_cache(maxsize=40000)
+@async_lru.alru_cache(maxsize=100000)
 async def get_item_metalevel(session, type_id):
     try:
         for dogma_attribute in \
@@ -113,7 +113,6 @@ async def get(session, url) -> dict:
         raise ValueError(f"Could not fetch data from ESI!")
 
 
-@async_lru.alru_cache(maxsize=2000, ttl=1800)
 async def get_kill_page(session, character_id, page):
     url = f"https://zkillboard.com/api/kills/characterID/{character_id}/kills/"
     if page > 1:
