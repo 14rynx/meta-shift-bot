@@ -196,11 +196,11 @@ async def get_kill_score_cached(session, kill_id, kill_hash, rules, main_charact
 async def get_kill_scores(session, rules, character_id):
     """Fetch all kills for a character in a given time frame"""
 
-    kills_and_hashes = await get_kill_pages(session, character_id, start=rules.season.start)
+    kills = await get_kill_pages(session, character_id, start=rules.season.start)
 
     # Find all kills that are already in cache
     tasks = []
-    for kill_id, kill_hash in kills_and_hashes:
+    for kill_id, kill_hash in kills.items():
         tasks.append(get_kill_score_cached(session, kill_id, kill_hash, rules, character_id))
 
     # Fetch scores
