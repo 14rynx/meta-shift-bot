@@ -135,15 +135,13 @@ async def get_kill_page(session, character_id, page):
             await asyncio.sleep(0.5 * (attempt + 2) ** 3)  # Exponential backoff
 
         # Extract data, which might be differently encoded depending on how zkill does it
-        if type(kills) is dict:
-            kills_and_hashes = kills.items()
-        else:
-            kills_and_hashes = [[kill["killmail_id"], kill["zkb"]["hash"]] for kill in kills]
+        if type(kills) is not dict:
+            kills = {kill["killmail_id"]: kill["zkb"]["hash"] for kill in kills}
 
         # Filter out wired kills that do not actually exist !?
-        kills_and_hashes = [(k, h) for k, h in kills_and_hashes if h != "CCP VERIFIED"]
+        kills = {k: h for k, h in kills.items() if h != "CCP VERIFIED"}
 
-    return kills_and_hashes
+    return kills
 
 
 async def get_kill_pages(session, character_id, start):
@@ -155,15 +153,15 @@ async def get_kill_pages(session, character_id, start):
         if over:
             break
 
-        kills_and_hashes = await get_kill_page(session, character_id, page)
+        kills = await get_kill_page(session, character_id, page)
 
         # Check if the response is empty. If so we reached the last page and can stop
-        if len(kills_and_hashes) == 0:
+        if len(kills) == 0:
             over = True
             continue
 
         # Check if the last kill (smallest id) is old enough
-        kill_id, kill_hash = min(kills_and_hashes, key=lambda x: x[0])
+        kill_id, kill_hash = min(kills.items(), key=lambda x: x[0])
         first_kill = await get_kill(session, kill_id, kill_hash)
         first_kill_time = datetime.strptime(first_kill.get('killmail_time'), '%Y-%m-%dT%H:%M:%SZ')
 
@@ -178,9 +176,9 @@ async def get_kill_pages(session, character_id, start):
 
         # Update per character cache and get kills from it if there are any
         if character_id in kill_cache:
-            kill_cache[character_id].extend(kills_and_hashes)
+            kill_cache[character_id].update(kills)
         else:
-            kill_cache[character_id] = kills_and_hashes
+            kill_cache[character_id] = kills
 
         # Sleep on smaller pages to not trigger 429 on zkillboard.com
         await asyncio.sleep(2)
