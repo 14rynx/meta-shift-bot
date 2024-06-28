@@ -49,17 +49,12 @@ async def refresh_scores(rules, max_delay):
 
             if worked:
                 logger.debug(f"Entry {entry.character_id} updated to {user_score} points.")
-
-                # Refetch entry because otherwise the float gets incremented !?
-                good_entry = Entry.select().where(Entry.character_id == entry.character_id).first()
-
                 if rules.season.end < datetime.utcnow():
-                    good_entry.points_expiry = datetime.utcnow() + max_delay
+                    entry.points_expiry = datetime.utcnow() + max_delay
                 else:
-                    good_entry.points_expiry = datetime.utcnow() + max_delay + (datetime.utcnow() - rules.season.end)
-                good_entry.points = user_score
-
-                good_entry.save()
+                    entry.points_expiry = datetime.utcnow() + max_delay + (datetime.utcnow() - rules.season.end)
+                entry.points = user_score
+                entry.save()
             else:
                 logger.exception(f"Updating character {entry.character_id} failed!")
 

@@ -64,14 +64,9 @@ async def update_scores_now(ctx, session, rules):
                 logger.warning(f"Updating character {entry.character_id} failed, retrying.")
             else:
                 logger.debug(f"Character {entry.character_id} scored {user_score} points")
-
-                # Refetch entry because otherwise the float gets incremented !?
-                good_entry = Entry.select().where(Entry.character_id == entry.character_id).first()
-
-                good_entry.points_expiry = datetime.utcnow() + max_delay
-                good_entry.points = user_score
-
-                good_entry.save()
+                entry.points_expiry = datetime.utcnow() + max_delay
+                entry.points = user_score
+                entry.save()
 
         # Update expired entries
         expired_entries = rules.season.entries.filter(Entry.points_expiry < datetime.utcnow())
