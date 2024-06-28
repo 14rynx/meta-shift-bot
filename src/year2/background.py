@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import ssl
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import aiohttp
 import certifi
@@ -22,9 +22,10 @@ async def refresh_scores(rules, max_delay):
     """Background task to refresh all user scores periodically."""
 
     while True:
-        next_refresh_time = datetime.utcnow() + max_delay / 12
+        next_refresh_time = datetime.utcnow() + timedelta(seconds=max_delay.total_seconds() / 12)
 
-        refresh_entries = rules.season.entries.filter(Entry.points_expiry < datetime.utcnow() + max_delay / 2)
+        refresh_window = datetime.utcnow() + timedelta(seconds=max_delay.total_seconds() / 2)
+        refresh_entries = rules.season.entries.filter(Entry.points_expiry < refresh_window)
 
         logger.info(f"Updating {refresh_entries.count()} entries.")
 
