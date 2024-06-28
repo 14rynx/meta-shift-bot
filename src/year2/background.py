@@ -46,7 +46,7 @@ async def refresh_scores(rules, max_delay):
                         break
 
             logger.debug(f"Entry {entry.character_id} updated to {user_score} points.")
-            if rules.season.end < datetime.utcnow():
+            if rules.season.end > datetime.utcnow():
                 entry.points_expiry = datetime.utcnow() + max_delay
             else:
                 entry.points_expiry = datetime.utcnow() + max_delay + (datetime.utcnow() - rules.season.end)
