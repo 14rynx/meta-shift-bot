@@ -7,17 +7,17 @@ import aiohttp
 import certifi
 from discord.ext import tasks
 
-from models import Entry
+from models import Entry, db
 from points import get_total_score, get_collated_scores
 
 # Configure the logger
 logger = logging.getLogger('discord.background')
-logger.setLevel(logging.ERROR)
+logger.setLevel(logging.DEBUG)
 
 ssl_context = ssl.create_default_context(cafile=certifi.where())
 
 
-@tasks.loop(count=1)
+@tasks.loop()
 async def refresh_scores(rules, max_delay):
     """Background task to refresh all user scores periodically."""
 
@@ -32,30 +32,28 @@ async def refresh_scores(rules, max_delay):
             async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
                 await rules.update(session)
 
-                worked = False
                 for _ in range(5):
-                    if worked:
-                        break
-
                     try:
                         score_groups, _ = await asyncio.gather(
                             get_collated_scores(session, rules, int(entry.character_id)),
                             asyncio.sleep(2))
                         user_score = get_total_score(score_groups)
-                        worked = True
                     except (ValueError, AttributeError, TimeoutError, aiohttp.http_exceptions.BadHttpMessage):  # noqa
                         await asyncio.sleep(2)  # Make sure zkill rate limit is not hit because of the error
                         logger.warning(f"Updating character {entry.character_id} failed, retrying.")
+                        user_score = entry.points
+                    else:
+                        break
 
-            if worked:
-                logger.debug(f"Entry {entry.character_id} updated to {user_score} points.")
-                if rules.season.end < datetime.utcnow():
-                    entry.points_expiry = datetime.utcnow() + max_delay
-                else:
-                    entry.points_expiry = datetime.utcnow() + max_delay + (datetime.utcnow() - rules.season.end)
-                entry.points = user_score
-                entry.save()
+            logger.debug(f"Entry {entry.character_id} updated to {user_score} points.")
+            if rules.season.end < datetime.utcnow():
+                entry.points_expiry = datetime.utcnow() + max_delay
             else:
-                logger.exception(f"Updating character {entry.character_id} failed!")
+                entry.points_expiry = datetime.utcnow() + max_delay + (datetime.utcnow() - rules.season.end)
+            entry.points = user_score
+            entry.save()
+
+        # Ensure everything is saved propperly
+        db.close()
 
         await asyncio.sleep(max((next_refresh_time - datetime.utcnow()).total_seconds(), 0))
