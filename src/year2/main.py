@@ -110,6 +110,7 @@ def find_kill_id(zkill_link: str) -> int:
 
 @bot.event
 async def on_ready():
+    logger.info(f"Metashiftbot ready with {current_season}.")
     refresh_scores.start(rules, max_delay)
 
 
