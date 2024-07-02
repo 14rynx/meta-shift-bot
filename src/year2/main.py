@@ -250,9 +250,9 @@ async def points(ctx, *character_name):
         # Parse arguments and log
         try:
             character_id, predicate = await find_character_id(str(ctx.author.id), character_name)
-            return
         except ValueError as instance:
             await ctx.send(f"Error: {instance}.")
+            return
 
         logger.info(f"{ctx.author.name} used !points {character_id}")
 
