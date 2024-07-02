@@ -114,9 +114,7 @@ async def get(session, url) -> dict:
 
 
 async def get_kill_page(session, character_id, page):
-    url = f"https://zkillboard.com/api/kills/characterID/{character_id}/kills/"
-    if page > 1:
-        url += f"page/{page}/"
+    url = f"https://zkillboard.com/api/kills/characterID/{character_id}/kills/page/{page}/"
 
     async with session.get(url) as response:
         kills = []
@@ -154,6 +152,7 @@ async def get_kill_pages(session, character_id, start):
             break
 
         kills = await get_kill_page(session, character_id, page)
+        print(kills)
 
         # Check if the response is empty. If so we reached the last page and can stop
         if len(kills) == 0:
