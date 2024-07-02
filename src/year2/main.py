@@ -248,7 +248,12 @@ async def points(ctx, *character_name):
 
     try:
         # Parse arguments and log
-        character_id, predicate = await find_character_id(str(ctx.author.id), character_name)
+        try:
+            character_id, predicate = await find_character_id(str(ctx.author.id), character_name)
+            return
+        except ValueError as instance:
+            await ctx.send(f"Error: {instance}.")
+
         logger.info(f"{ctx.author.name} used !points {character_id}")
 
         # Execute command
@@ -271,7 +276,11 @@ async def breakdown(ctx, *character_name):
 
     try:
         # Parse arguments and log
-        character_id, predicate = await find_character_id(str(ctx.author.id), character_name)
+        try:
+            character_id, predicate = await find_character_id(str(ctx.author.id), character_name)
+        except ValueError as instance:
+            await ctx.send(f"Error: {instance}.")
+            return
         logger.info(f"{ctx.author.name} used !breakdown {character_id}")
 
         # Execute command
@@ -313,7 +322,11 @@ async def explain(ctx, zkill_link, *character_name):
     try:
         # Parse arguments and log
         kill_id = find_kill_id(zkill_link)
-        character_id, _ = await find_character_id(None, character_name)
+        try:
+            character_id, _ = await find_character_id(None, character_name)
+        except ValueError as instance:
+            await ctx.send(f"Error: {instance}.")
+            return
         logger.info(f"{ctx.author.name} used !explain {kill_id} {character_id}")
 
         # Execute command

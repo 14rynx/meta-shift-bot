@@ -185,4 +185,4 @@ async def get_kill_pages(session, character_id, start):
 
     if character_id in kill_cache:
         return kill_cache[character_id]
-    return []
+    return {}
