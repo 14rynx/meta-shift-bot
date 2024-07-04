@@ -118,19 +118,24 @@ async def get_kill_page(session, character_id, page):
 
     async with session.get(url) as response:
         kills = []
-        for attempt in range(3):
+        success = False
+        for attempt in range(5):
             if response.status == 200:
                 try:
                     kills = await response.json(content_type=None)
                 except Exception as instance:
                     logger.error(f"Could not parse JSON: {await response.text()}", exc_info=True)
                 else:
+                    success = True
                     break
             elif response.status == 429:
                 logger.warning(f"To many requests with user {character_id} on page {page}")
                 raise ValueError(f"Could not fetch data from character {character_id}!")
 
             await asyncio.sleep(0.5 * (attempt + 2) ** 3)  # Exponential backoff
+
+        if not success:
+            raise ValueError(f"Could not fetch data from character {character_id}!")
 
         # Extract data, which might be differently encoded depending on how zkill does it
         if type(kills) is not dict:
