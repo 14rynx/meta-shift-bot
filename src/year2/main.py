@@ -88,7 +88,7 @@ async def find_character_id(author_id: str, character_name_array: tuple):
             try:
                 user = User.get(user_id=author_id)
                 entry = Entry.get(user=user, season=current_season)
-                character_id = entry.character_id
+                character_id = int(entry.character_id)
                 possesive = "You currently have"
             except (User.DoesNotExist, Entry.DoesNotExist): # noqa
                 raise ValueError("You do not have any linked character!")
