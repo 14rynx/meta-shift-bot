@@ -221,9 +221,12 @@ async def ranking(ctx):
             author_ids = [entry[0] for entry in users_leaderboard]
 
             # Calculate which entries to show
-            middle = author_ids.index(str(ctx.author.id))
-            first = max(middle - 2, 0)
-            last = min(middle + 3, len(users_leaderboard))
+            try:
+                middle = author_ids.index(str(ctx.author.id))
+                first = max(middle - 2, 0)
+                last = min(middle + 3, len(users_leaderboard))
+            except ValueError:
+                await ctx.send(f"You do not have any linked character!")
 
             # Build output
             output = "# Leaderboard\n (around your position)\n"
