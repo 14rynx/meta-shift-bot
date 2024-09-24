@@ -22,17 +22,16 @@ async def refresh_scores(rules, max_delay):
     """Background task to refresh all user scores periodically."""
 
     while True:
-        next_refresh_time = datetime.utcnow() + max_delay / 12
-        refresh_window = datetime.utcnow() + max_delay / 2
-        refresh_entries = rules.season.entries.filter(Entry.points_expiry < refresh_window)
+        for _ in range(5):
 
-        logger.info(f"Updating {refresh_entries.count()} entries.")
+            refresh_entries = rules.season.entries.filter(Entry.points_expiry < refresh_window)
 
-        for entry in refresh_entries:
-            async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
-                await rules.update(session)
+            logger.info(f"Updating {refresh_entries.count()} entries.")
 
-                for _ in range(5):
+            for entry in refresh_entries:
+                async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
+                    await rules.update(session)
+
                     try:
                         score_groups, _ = await asyncio.gather(
                             get_collated_scores(session, rules, int(entry.character_id)),
@@ -53,4 +52,6 @@ async def refresh_scores(rules, max_delay):
             entry.points = user_score
             entry.save()
 
+        next_refresh_time = datetime.utcnow() + max_delay / 12
+        refresh_window = datetime.utcnow() + max_delay / 2
         await asyncio.sleep(max((next_refresh_time - datetime.utcnow()).total_seconds(), 0))
