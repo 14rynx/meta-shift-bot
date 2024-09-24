@@ -105,11 +105,13 @@ async def get_kill(session, kill_id, kill_hash):
 
 async def get(session, url) -> dict:
     async with session.get(url) as response:
-        if response.status == 200:
-            try:
-                return await response.json(content_type=None)
-            except Exception as e:
-                logger.error(f"Error {e} with ESI {response.status}: {await response.text()}")
+        for attempt in range(5):
+            if response.status == 200:
+                try:
+                    return await response.json(content_type=None)
+                except Exception as e:
+                    logger.error(f"Error {e} with ESI {response.status}: {await response.text()}")
+                await asyncio.sleep(0.25 * (attempt + 1) ** 3)  # Backoff
         raise ValueError(f"Could not fetch data from ESI!")
 
 
@@ -132,7 +134,7 @@ async def get_kill_page(session, character_id, page):
                 logger.warning(f"To many requests with user {character_id} on page {page}")
                 raise ValueError(f"Could not fetch data from character {character_id}!")
 
-            await asyncio.sleep(0.5 * (attempt + 2) ** 3)  # Exponential backoff
+            await asyncio.sleep(0.5 * (attempt + 1) ** 3)  # backoff
 
         if not success:
             raise ValueError(f"Could not fetch data from character {character_id}!")
