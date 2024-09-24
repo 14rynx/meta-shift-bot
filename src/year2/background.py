@@ -22,6 +22,8 @@ async def refresh_scores(rules, max_delay):
     """Background task to refresh all user scores periodically."""
 
     while True:
+        refresh_window = datetime.utcnow() + max_delay / 2
+
         for _ in range(5):
 
             refresh_entries = rules.season.entries.filter(Entry.points_expiry < refresh_window)
@@ -53,5 +55,4 @@ async def refresh_scores(rules, max_delay):
             entry.save()
 
         next_refresh_time = datetime.utcnow() + max_delay / 12
-        refresh_window = datetime.utcnow() + max_delay / 2
         await asyncio.sleep(max((next_refresh_time - datetime.utcnow()).total_seconds(), 0))
