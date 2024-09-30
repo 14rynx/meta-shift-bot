@@ -227,6 +227,7 @@ async def ranking(ctx):
                 last = min(middle + 3, len(users_leaderboard))
             except ValueError:
                 await ctx.send(f"You do not have any linked character!")
+                return
 
             # Build output
             output = "# Leaderboard\n (around your position)\n"
