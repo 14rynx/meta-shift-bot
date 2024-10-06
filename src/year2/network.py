@@ -93,6 +93,24 @@ async def get_ship_slots(session, type_id):
 
 
 @async_lru.alru_cache(maxsize=40000)
+async def get_hash(session, kill_id):
+    async with session.get(f"https://zkillboard.com/api/kills/killID/{kill_id}/") as response:
+
+        for attempt in range(5):
+            if response.status == 200:
+                try:
+                    return await response.json(content_type=None)[0]["zkb"]["hash"]
+                except Exception as instance:
+                    logger.error(f"Could not parse JSON: {await response.text()}", exc_info=True)
+            elif response.status == 429:
+                logger.warning(f"To many requests while trying to get hash {kill_id}")
+
+            await asyncio.sleep(0.5 * (attempt + 1) ** 3)  # backoff
+
+    raise ValueError(f"Could not fetch data from zkillboard.com!")
+
+
+@async_lru.alru_cache(maxsize=40000)
 async def get_kill(session, kill_id, kill_hash):
     """Fetch a kill from ESI based on its id and hash"""
     return await get(session, f"https://esi.evetech.net/latest/killmails/{kill_id}/{kill_hash}/")
