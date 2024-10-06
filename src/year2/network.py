@@ -2,7 +2,6 @@ import asyncio
 import json
 import logging
 import ssl
-from calendar import error
 from datetime import datetime
 
 import aiohttp
@@ -103,13 +102,14 @@ async def get_kill(session, kill_id, kill_hash):
     """Fetch a kill from ESI based on its id and hash"""
     return await get(session, f"https://esi.evetech.net/latest/killmails/{kill_id}/{kill_hash}/")
 
+
 # Limit all ESI things to 50 concurrent requests
 esi_semaphore = asyncio.BoundedSemaphore(50)
 error_limit = 100
 error_delay = 0
 
-async def get(session, url) -> dict:
 
+async def get(session, url) -> dict:
     # Wait for ESI errors to pass
     global error_limit, error_delay
     if error_limit < 1:
