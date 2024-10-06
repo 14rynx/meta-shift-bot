@@ -190,15 +190,11 @@ async def get_kill_pages(session, character_id, start):
     over = False
 
     for page in range(1, 100):
-        if over:
-            break
-
         kills = await get_kill_page(session, character_id, page)
 
         # Check if the response is empty. If so we reached the last page and can stop
         if len(kills) == 0:
-            over = True
-            continue
+            break
 
         # Check if the last kill (smallest id) is old enough
         kill_id, kill_hash = min(kills.items(), key=lambda x: x[0])
@@ -222,6 +218,9 @@ async def get_kill_pages(session, character_id, start):
 
         # Sleep on smaller pages to not trigger 429 on zkillboard.com
         await asyncio.sleep(2)
+
+        if over:
+            break
 
     if character_id in kill_cache:
         return kill_cache[character_id]
