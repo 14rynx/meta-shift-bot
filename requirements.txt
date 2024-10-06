@@ -1,9 +1,9 @@
-google-api-python-client~=2.80.0
+google-api-python-client
 google-auth-httplib2
 google-auth-oauthlib
-discord~=2.1.0
+discord
 async-lru
 asyncio
-aiohttp~=3.8.4
-certifi~=2022.12.7
+aiohttp
+certifi
 peewee

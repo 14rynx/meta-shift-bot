@@ -93,11 +93,6 @@ async def get_ship_slots(session, type_id):
 
 
 @async_lru.alru_cache(maxsize=40000)
-async def get_hash(session, kill_id):
-    return (await get(session, f"https://zkillboard.com/api/kills/killID/{kill_id}/"))[0]["zkb"]["hash"]
-
-
-@async_lru.alru_cache(maxsize=40000)
 async def get_kill(session, kill_id, kill_hash):
     """Fetch a kill from ESI based on its id and hash"""
     return await get(session, f"https://esi.evetech.net/latest/killmails/{kill_id}/{kill_hash}/")
@@ -120,9 +115,9 @@ async def get(session, url) -> dict:
         async with session.get(url) as response:
 
             # Fetch delay of lowest error limit
-            if (current_error_limit := int(response.headers["X-Esi-Error-Limit-Remain"])) < error_limit:
+            if (current_error_limit := int(response.headers.get("X-Esi-Error-Limit-Remain", 100))) < error_limit:
                 error_limit = current_error_limit
-                error_delay = int(response.headers["X-Esi-Error-Limit-Reset"])
+                error_delay = int(response.headers.get("X-Esi-Error-Limit-Reset", 0))
 
             for attempt in range(20):
                 if response.status == 200:
