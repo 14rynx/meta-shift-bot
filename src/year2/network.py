@@ -100,7 +100,7 @@ async def get_hash(session, kill_id):
             if response.status == 200:
                 try:
                     return await response.json(content_type=None)[0]["zkb"]["hash"]
-                except Exception as instance:
+                except Exception:
                     logger.error(f"Could not parse JSON: {await response.text()}", exc_info=True)
             elif response.status == 429:
                 logger.warning(f"To many requests while trying to get hash {kill_id}")
