@@ -53,5 +53,5 @@ async def refresh_scores(rules, max_delay):
                     entry.save()
                     await asyncio.sleep(2)
 
-    next_refresh_time = datetime.utcnow() + max_delay / 12
-    await asyncio.sleep(max((next_refresh_time - datetime.utcnow()).total_seconds(), 0))
+        next_refresh_time = datetime.utcnow() + max_delay / 12
+        await asyncio.sleep(max((next_refresh_time - datetime.utcnow()).total_seconds(), 0))
