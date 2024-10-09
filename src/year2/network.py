@@ -39,7 +39,7 @@ async def get(session, url) -> dict:
     async with esi_semaphore:
 
         # Retry logic with dynamic User-Agent for esi.evetech.net
-        for attempt in range(5):
+        for attempt in range(20 if "esi.evetech.net" in url else 5):
             headers = {}
             if "esi.evetech.net" in url:
                 headers['User-Agent'] = generate_random_user_agent()
@@ -56,9 +56,9 @@ async def get(session, url) -> dict:
                     try:
                         return await response.json(content_type=None)
                     except Exception as e:
-                        logger.error(f"Error {e} with ESI {response.status}: {await response.text()}")
+                        logger.warning(f"Error {e} with ESI {response.status}: {await response.text()}")
                 else:
-                    logger.error(f"Error with ESI {response.status}: {await response.text()}")
+                    logger.warning(f"Error with ESI {response.status}: {await response.text()}")
 
                 # Retry with backoff if esi.evetech.net
                 if "esi.evetech.net" in url:
