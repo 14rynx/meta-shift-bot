@@ -19,6 +19,14 @@ esi_semaphore = asyncio.BoundedSemaphore(50)
 error_limit = 100
 error_delay = 0
 
+import random
+import string
+import asyncio
+
+
+def generate_random_user_agent():
+    return f"Metashiftbot by Larynx Austrene <larynx.austrene@gmail.com> Python-Aiohttp-{''.join(random.choices(string.ascii_letters + string.digits, k=8))}"
+
 
 async def get(session, url) -> dict:
     # Wait for ESI errors to pass
@@ -29,18 +37,21 @@ async def get(session, url) -> dict:
             error_limit = 100
 
     async with esi_semaphore:
-        async with session.get(url) as response:
 
-            # Fetch delay of lowest error limit
-
+        # Retry logic with dynamic User-Agent for esi.evetech.net
+        for attempt in range(5):
+            headers = {}
             if "esi.evetech.net" in url:
-                if (current_error_limit := int(response.headers.get("X-Esi-Error-Limit-Remain", 100))) < error_limit:
-                    error_limit = current_error_limit
+                headers['User-Agent'] = generate_random_user_agent()
+
+            async with session.get(url, headers=headers) as response:
+
+                # Handle error limit headers for esi.evetech.net
+                if "esi.evetech.net" in url:
+                    current_error_limit = int(response.headers.get("X-Esi-Error-Limit-Remain", 100))
+                    error_limit = min(error_limit, current_error_limit)
                     error_delay = int(response.headers.get("X-Esi-Error-Limit-Reset", 0))
-                attempts = 20
-            else:
-                attempts = 5
-            for attempt in range(attempts):
+
                 if response.status == 200:
                     try:
                         return await response.json(content_type=None)
@@ -49,12 +60,13 @@ async def get(session, url) -> dict:
                 else:
                     logger.error(f"Error with ESI {response.status}: {await response.text()}")
 
+                # Retry with backoff if esi.evetech.net
                 if "esi.evetech.net" in url:
-                    await asyncio.sleep(0.5 * (attempt + 1))   # Linear Backoff on ESI Error
+                    await asyncio.sleep(0.5 * (attempt + 1))  # Linear backoff
                 else:
-                    await asyncio.sleep(0.25 * (attempt + 1) ** 3)   # Cubic Backoff on Error
+                    await asyncio.sleep(0.25 * (attempt + 1) ** 3)  # Cubic backoff
 
-            raise ValueError(f"Could not fetch data from ESI!")
+        raise ValueError(f"Could not fetch data from {url}!")
 
 
 async def lookup(string, return_type):
