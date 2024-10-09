@@ -14,6 +14,48 @@ logger.setLevel(logging.ERROR)
 
 kill_cache = {}
 
+# Limit all ESI things to 50 concurrent requests
+esi_semaphore = asyncio.BoundedSemaphore(50)
+error_limit = 100
+error_delay = 0
+
+
+async def get(session, url) -> dict:
+    # Wait for ESI errors to pass
+    if "esi.evetech.net" in url:
+        global error_limit, error_delay
+        if error_limit < 1:
+            await asyncio.sleep(error_delay)
+            error_limit = 100
+
+    async with esi_semaphore:
+        async with session.get(url) as response:
+
+            # Fetch delay of lowest error limit
+
+            if "esi.evetech.net" in url:
+                if (current_error_limit := int(response.headers.get("X-Esi-Error-Limit-Remain", 100))) < error_limit:
+                    error_limit = current_error_limit
+                    error_delay = int(response.headers.get("X-Esi-Error-Limit-Reset", 0))
+                attempts = 20
+            else:
+                attempts = 5
+            for attempt in range(attempts):
+                if response.status == 200:
+                    try:
+                        return await response.json(content_type=None)
+                    except Exception as e:
+                        logger.error(f"Error {e} with ESI {response.status}: {await response.text()}")
+                else:
+                    logger.error(f"Error with ESI {response.status}: {await response.text()}")
+
+                if "esi.evetech.net" in url:
+                    await asyncio.sleep(0.5 * (attempt + 1))   # Linear Backoff on ESI Error
+                else:
+                    await asyncio.sleep(0.25 * (attempt + 1) ** 3)   # Cubic Backoff on Error
+
+            raise ValueError(f"Could not fetch data from ESI!")
+
 
 async def lookup(string, return_type):
     """Tries to find an ID related to the input.
@@ -114,40 +156,6 @@ async def get_hash(session, kill_id):
 async def get_kill(session, kill_id, kill_hash):
     """Fetch a kill from ESI based on its id and hash"""
     return await get(session, f"https://esi.evetech.net/latest/killmails/{kill_id}/{kill_hash}/")
-
-
-# Limit all ESI things to 50 concurrent requests
-esi_semaphore = asyncio.BoundedSemaphore(50)
-error_limit = 100
-error_delay = 0
-
-
-async def get(session, url) -> dict:
-    # Wait for ESI errors to pass
-    global error_limit, error_delay
-    if error_limit < 1:
-        await asyncio.sleep(error_delay)
-        error_limit = 100
-
-    async with esi_semaphore:
-        async with session.get(url) as response:
-
-            # Fetch delay of lowest error limit
-            if (current_error_limit := int(response.headers.get("X-Esi-Error-Limit-Remain", 100))) < error_limit:
-                error_limit = current_error_limit
-                error_delay = int(response.headers.get("X-Esi-Error-Limit-Reset", 0))
-
-            for attempt in range(20):
-                if response.status == 200:
-                    try:
-                        return await response.json(content_type=None)
-                    except Exception as e:
-                        logger.error(f"Error {e} with ESI {response.status}: {await response.text()}")
-                else:
-                    logger.error(f"Error with ESI {response.status}: {await response.text()}")
-
-                await asyncio.sleep(0.25 * (attempt + 1) ** 3)  # Backoff
-            raise ValueError(f"Could not fetch data from ESI!")
 
 
 async def get_kill_page(session, character_id, page):
