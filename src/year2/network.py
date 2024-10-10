@@ -24,9 +24,19 @@ import string
 import asyncio
 
 
-def generate_random_user_agent():
-    return f"Metashiftbot by Larynx Austrene <larynx.austrene@gmail.com> Python-Aiohttp-{''.join(random.choices(string.ascii_letters + string.digits, k=8))}"
+def generate_headers(url):
+    headers = {}
 
+    user_agent = "Metashift Bot by Larynx Austrene <larynx.austrene@gmail.com> Python-Aiohttp"
+
+    if "esi.evetech.net" in url:
+        # Randomize user agent to avoid error caching
+        headers['User-Agent'] = f"{user_agent}-{''.join(random.choices(string.ascii_letters + string.digits, k=8))}"
+    else:
+        headers[
+            'User-Agent'] = user_agent
+
+    return headers
 
 async def get(session, url) -> dict:
     # Wait for ESI errors to pass
@@ -40,11 +50,8 @@ async def get(session, url) -> dict:
 
         # Retry logic with dynamic User-Agent for esi.evetech.net
         for attempt in range(20 if "esi.evetech.net" in url else 5):
-            headers = {}
-            if "esi.evetech.net" in url:
-                headers['User-Agent'] = generate_random_user_agent()
 
-            async with session.get(url, headers=headers) as response:
+            async with session.get(url, headers=generate_headers(url)) as response:
 
                 # Handle error limit headers for esi.evetech.net
                 if "esi.evetech.net" in url:
