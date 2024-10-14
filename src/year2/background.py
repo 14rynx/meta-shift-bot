@@ -5,6 +5,7 @@ from datetime import datetime
 
 import aiohttp
 import certifi
+from aiohttp.abc import HTTPException
 from discord.ext import tasks
 
 from models import Entry
@@ -12,7 +13,7 @@ from points import get_total_score, get_collated_scores
 
 # Configure the logger
 logger = logging.getLogger('discord.background')
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
 ssl_context = ssl.create_default_context(cafile=certifi.where())
 
@@ -29,7 +30,11 @@ async def refresh_scores(rules, max_delay):
         logger.info(f"Updating {refresh_entries.count()} entries.")
 
         async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
-            await rules.update(session)
+            try:
+                await rules.update(session)
+            except HTTPException:
+                await asyncio.sleep(60)
+                continue
 
             for entry in refresh_entries:
                 try:
