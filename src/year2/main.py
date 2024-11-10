@@ -1,4 +1,5 @@
 import asyncio
+import functools
 import logging
 import os
 import ssl
@@ -59,7 +60,7 @@ async def update_scores_now(ctx, session, rules):
                     asyncio.sleep(1)
                 )
                 user_score = get_total_score(score_groups)
-            except (ValueError, AttributeError, TimeoutError, aiohttp.http_exceptions.BadHttpMessage): # noqa
+            except (ValueError, AttributeError, TimeoutError, aiohttp.http_exceptions.BadHttpMessage):  # noqa
                 await asyncio.sleep(1)  # Make sure zkill rate limit is not hit because of the error
                 logger.warning(f"Updating character {entry.character_id} failed, retrying.")
             else:
@@ -90,7 +91,7 @@ async def find_character_id(author_id: str, character_name_array: tuple):
                 entry = Entry.get(user=user, season=current_season)
                 character_id = int(entry.character_id)
                 possesive = "You currently have"
-            except (User.DoesNotExist, Entry.DoesNotExist): # noqa
+            except (User.DoesNotExist, Entry.DoesNotExist):  # noqa
                 raise ValueError("You do not have any linked character!")
         else:
             return None, None
@@ -108,6 +109,24 @@ def find_kill_id(zkill_link: str) -> int:
     return kill_id
 
 
+def command_error_handler(func):
+    """Decorator for handling bot command logging and exceptions."""
+
+    @functools.wraps(func)
+    async def wrapper(*args, **kwargs):
+        ctx = args[0]
+        extra_args = " ".join(args[1:]) if len(args) > 1 else ""
+        logger.info(f"{ctx.author.name} used !{func.__name__} {extra_args}")
+
+        try:
+            return await func(*args, **kwargs)
+        except Exception as e:
+            logger.error(f"Error in !{func.__name__} command: {e}", exc_info=True)
+            await ctx.send(f"An error occurred in !{func.__name__}.")
+
+    return wrapper
+
+
 @bot.event
 async def on_ready():
     logger.info(f"Metashiftbot ready with {current_season}.")
@@ -115,9 +134,9 @@ async def on_ready():
 
 
 @bot.command()
+@command_error_handler
 async def link(ctx, *character_name):
     """Links your character to take part in the competition."""
-    logger.info(f"{ctx.author.name} used !link {character_name}")
 
     # Figure out the character
     character_name = " ".join(character_name)
@@ -149,9 +168,9 @@ async def link(ctx, *character_name):
 
 
 @bot.command()
+@command_error_handler
 async def unlink(ctx):
     """Unlinks your character from the competition."""
-    logger.info(f"{ctx.author.name} used !unlink")
 
     user, _ = User.get_or_create(id=str(ctx.author.id))
 
@@ -166,191 +185,167 @@ async def unlink(ctx):
 
 
 @bot.command()
+@command_error_handler
 async def leaderboard(ctx, top=None):
     """Shows the current people with the most points."""
-    logger.info(f"{ctx.author.name} used !leaderboard {top}")
 
-    try:
-        async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
+    async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
 
-            # Ensure all data is up-to-date
-            await update_scores_now(ctx, session, rules)
+        # Ensure all data is up-to-date
+        await update_scores_now(ctx, session, rules)
 
-            # Parse length of data to show
-            if top is None:
-                top = 10
-            elif top in ["all", "csv"] and str(ctx.author.id) in os.environ["PRIVILEGED_USERS"].split(" "):
-                top = current_season.entries.count()
+        # Parse length of data to show
+        if top is None:
+            top = 10
+        elif top in ["all", "csv"] and str(ctx.author.id) in os.environ["PRIVILEGED_USERS"].split(" "):
+            top = current_season.entries.count()
 
-            # Build output
-            output = "# Leaderboard\n"
-            for count, entry in enumerate(current_season.entries.order_by(Entry.points.desc()).limit(top)):
-                if top == "csv":
-                    output += (
-                        f"{count + 1}, {(bot.get_user(entry.user.user_id)).name}, "
-                        f"{await get_character_name(session, entry.character_id)}, {entry.points:.1f}"
-                    )
-                else:
-                    output += (
-                        f"{count + 1}: <@{entry.user.user_id}> [{await get_character_name(session, entry.character_id)}]"
-                        f"(<https://zkillboard.com/character/{entry.character_id}/>) with {entry.points:.1f} points\n"
-                    )
+        # Build output
+        output = "# Leaderboard\n"
+        for count, entry in enumerate(current_season.entries.order_by(Entry.points.desc()).limit(top)):
+            if top == "csv":
+                output += (
+                    f"{count + 1}, {(bot.get_user(entry.user.user_id)).name}, "
+                    f"{await get_character_name(session, entry.character_id)}, {entry.points:.1f}"
+                )
+            else:
+                output += (
+                    f"{count + 1}: <@{entry.user.user_id}> [{await get_character_name(session, entry.character_id)}]"
+                    f"(<https://zkillboard.com/character/{entry.character_id}/>) with {entry.points:.1f} points\n"
+                )
 
-            await send_large_message(ctx, output, delimiter="\n", allowed_mentions=discord.AllowedMentions(users=False))
-
-    except Exception as instance:
-        logger.error("Error in command !leaderboard:", exc_info=True)
-        await ctx.send(f"Error: {instance}. Try again and ping Larynx if it keeps happening.")
-
+        await send_large_message(ctx, output, delimiter="\n", allowed_mentions=discord.AllowedMentions(users=False))
 
 
 @bot.command()
+@command_error_handler
 async def ranking(ctx):
     """Shows the people around your current score."""
-    logger.info(f"{ctx.author.name} used !ranking")
 
-    try:
-        async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
+    async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
 
-            # Ensure all data is up-to-date
-            await update_scores_now(ctx, session, rules)
+        # Ensure all data is up-to-date
+        await update_scores_now(ctx, session, rules)
 
-            # Fetch user scores from the database
-            user_entries = current_season.entries.order_by(Entry.points.desc())
-            users_leaderboard = [(entry.user.user_id, entry.character_id, entry.points) for entry in user_entries]
-            author_ids = [entry[0] for entry in users_leaderboard]
+        # Fetch user scores from the database
+        user_entries = current_season.entries.order_by(Entry.points.desc())
+        users_leaderboard = [(entry.user.user_id, entry.character_id, entry.points) for entry in user_entries]
+        author_ids = [entry[0] for entry in users_leaderboard]
 
-            # Calculate which entries to show
-            try:
-                middle = author_ids.index(str(ctx.author.id))
-                first = max(middle - 2, 0)
-                last = min(middle + 3, len(users_leaderboard))
-            except ValueError:
-                await ctx.send(f"You do not have any linked character!")
-                return
+        # Calculate which entries to show
+        try:
+            middle = author_ids.index(str(ctx.author.id))
+            first = max(middle - 2, 0)
+            last = min(middle + 3, len(users_leaderboard))
+        except ValueError:
+            await ctx.send(f"You do not have any linked character!")
+            return
 
-            # Build output
-            output = "# Leaderboard\n (around your position)\n"
-            count = first + 1
-            for aid, cid, score in users_leaderboard[first:last]:
-                output += (
-                    f"{count}: <@{aid}> [{await get_character_name(session, cid)}]"
-                    f"(<https://zkillboard.com/character/{cid}/>) with {score:.1f} points\n"
-                )
-                count += 1
+        # Build output
+        output = "# Leaderboard\n (around your position)\n"
+        count = first + 1
+        for aid, cid, score in users_leaderboard[first:last]:
+            output += (
+                f"{count}: <@{aid}> [{await get_character_name(session, cid)}]"
+                f"(<https://zkillboard.com/character/{cid}/>) with {score:.1f} points\n"
+            )
+            count += 1
 
-            await send_large_message(ctx, output, delimiter="\n", allowed_mentions=discord.AllowedMentions(users=False))
-
-    except Exception as instance:
-        logger.error("Error in command !ranking:", exc_info=True)
-        await ctx.send(f"Error: {instance}. Try again and ping Larynx if it keeps happening.")
+        await send_large_message(ctx, output, delimiter="\n", allowed_mentions=discord.AllowedMentions(users=False))
 
 
 @bot.command()
+@command_error_handler
 async def points(ctx, *character_name):
     """Shows the total points someone achieved, defaults to your linked character."""
 
+    # Parse arguments and log
     try:
-        # Parse arguments and log
-        try:
-            character_id, predicate = await find_character_id(str(ctx.author.id), character_name)
-        except ValueError as instance:
-            await ctx.send(f"Error: {instance}.")
-            return
+        character_id, predicate = await find_character_id(str(ctx.author.id), character_name)
+    except ValueError as instance:
+        await ctx.send(f"Error: {instance}.")
+        return
 
-        logger.info(f"{ctx.author.name} used !points {character_id}")
+    logger.info(f"{ctx.author.name} used !points {character_id}")
 
-        # Execute command
-        async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
+    # Execute command
+    async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
 
-            # Get data
-            await rules.update(session)
-            score_groups = await get_collated_scores(session, rules, character_id)
+        # Get data
+        await rules.update(session)
+        score_groups = await get_collated_scores(session, rules, character_id)
 
-            await ctx.send(f"{predicate} {get_total_score(score_groups)} points")
-
-    except Exception as instance:
-        logger.error("Error in command !points:", exc_info=True)
-        await ctx.send(f"Error: {instance}. Try again and ping Larynx if it keeps happening.")
+        await ctx.send(f"{predicate} {get_total_score(score_groups)} points")
 
 
 @bot.command()
+@command_error_handler
 async def breakdown(ctx, *character_name):
     """Shows a breakdown of how someone achieved their points, defaults to your linked character."""
 
     try:
-        # Parse arguments and log
-        try:
-            character_id, predicate = await find_character_id(str(ctx.author.id), character_name)
-        except ValueError as instance:
-            await ctx.send(f"Error: {instance}.")
-            return
-        logger.info(f"{ctx.author.name} used !breakdown {character_id}")
+        character_id, predicate = await find_character_id(str(ctx.author.id), character_name)
+    except ValueError as instance:
+        await ctx.send(f"Error: {instance}.")
+        return
+    logger.info(f"{ctx.author.name} used !breakdown {character_id}")
 
-        # Execute command
-        async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
+    # Execute command
+    async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
 
-            # Get data
-            await rules.update(session)
-            groups = await get_collated_scores(session, rules, character_id)
+        # Get data
+        await rules.update(session)
+        groups = await get_collated_scores(session, rules, character_id)
 
-            # Build output
-            output = f"{predicate} {get_total_score(groups)} points with the following distribution:\n"
-            point_strings = []
-            for total_score, kills in sorted(groups, reverse=True)[0:30]:
-                if len(kills) == 1:
-                    point_string = f"[**{total_score:.1f}**](<https://zkillboard.com/kill/{kills[0][0]}/>)"
-                else:
-                    point_string = f"**{total_score:.1f}** ("
-                    links = [f"[{s:.1f}](<https://zkillboard.com/kill/{i}/>)" for i, s in kills]
-                    point_string += ", ".join(links)
-                    point_string += ")"
-                point_strings.append(point_string)
-            output += ", ".join(point_strings)
+        # Build output
+        output = f"{predicate} {get_total_score(groups)} points with the following distribution:\n"
+        point_strings = []
+        for total_score, kills in sorted(groups, reverse=True)[0:30]:
+            if len(kills) == 1:
+                point_string = f"[**{total_score:.1f}**](<https://zkillboard.com/kill/{kills[0][0]}/>)"
+            else:
+                point_string = f"**{total_score:.1f}** ("
+                links = [f"[{s:.1f}](<https://zkillboard.com/kill/{i}/>)" for i, s in kills]
+                point_string += ", ".join(links)
+                point_string += ")"
+            point_strings.append(point_string)
+        output += ", ".join(point_strings)
 
-            if len(point_strings) == 0:
-                output += "- no points for this character so far."
+        if len(point_strings) == 0:
+            output += "- no points for this character so far."
 
-            # Send message
-            await send_large_message(ctx, output, delimiter=",", allowed_mentions=discord.AllowedMentions(users=False))
-
-    except Exception as instance:
-        logger.error("Error in command !breakdown:", exc_info=True)
-        await ctx.send(f"Error: {instance}. Try again and ping Larynx if it keeps happening.")
+        # Send message
+        await send_large_message(ctx, output, delimiter=",", allowed_mentions=discord.AllowedMentions(users=False))
 
 
 @bot.command()
+@command_error_handler
 async def explain(ctx, zkill_link, *character_name):
     """Shows the total amount of points for some kill."""
 
+    # Parse arguments and log
+    kill_id = find_kill_id(zkill_link)
     try:
-        # Parse arguments and log
-        kill_id = find_kill_id(zkill_link)
-        try:
-            character_id, _ = await find_character_id(None, character_name)
-        except ValueError as instance:
-            await ctx.send(f"Error: {instance}.")
-            return
-        logger.info(f"{ctx.author.name} used !explain {kill_id} {character_id}")
+        character_id, _ = await find_character_id(None, character_name)
+    except ValueError as instance:
+        await ctx.send(f"Error: {instance}.")
+        return
+    logger.info(f"{ctx.author.name} used !explain {kill_id} {character_id}")
 
-        # Execute command
-        async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
+    # Execute command
+    async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
 
-            await rules.update(session)
-            kill_hash = await get_hash(session, kill_id)
-            kill_id, kill_time, kill_score, time_bracket = await get_kill_score(session, kill_id, kill_hash, rules,
-                                                                                main_character_id=character_id)
-            if character_id is not None:
-                explain_style = "when using the largest ship as the ship of the contestant"
-            else:
-                explain_style = "with the given character"
+        await rules.update(session)
+        kill_hash = await get_hash(session, kill_id)
+        kill_id, kill_time, kill_score, time_bracket = await get_kill_score(session, kill_id, kill_hash, rules,
+                                                                            main_character_id=character_id)
+        if character_id is not None:
+            explain_style = "when using the largest ship as the ship of the contestant"
+        else:
+            explain_style = "with the given character"
 
-            await ctx.channel.send(f"This [kill](https://zkillboard.com/kill/{kill_id}/) is worth {kill_score:.1f} "
-                                   f"{explain_style}, and will chain for {time_bracket.total_seconds():.1f} seconds.")
-
-    except Exception as instance:
-        logger.error("Error in command !explain:", exc_info=True)
-        await ctx.send(f"Error: {instance}. Try again and ping Larynx if it keeps happening.")
+        await ctx.channel.send(f"This [kill](https://zkillboard.com/kill/{kill_id}/) is worth {kill_score:.1f} "
+                               f"{explain_style}, and will chain for {time_bracket.total_seconds():.1f} seconds.")
 
 
 bot.run(os.environ["TOKEN"])
