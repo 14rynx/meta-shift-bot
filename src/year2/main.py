@@ -115,8 +115,7 @@ def command_error_handler(func):
     @functools.wraps(func)
     async def wrapper(*args, **kwargs):
         ctx = args[0]
-        extra_args = " ".join(args[1:]) if len(args) > 1 else ""
-        logger.info(f"{ctx.author.name} used !{func.__name__} {extra_args}")
+        logger.info(f"{ctx.author.name} used !{func.__name__}")
 
         try:
             return await func(*args, **kwargs)
